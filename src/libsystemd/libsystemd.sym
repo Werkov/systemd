@@ -481,3 +481,8 @@ global:
         sd_bus_path_encode_many;
         sd_listen_fds_with_names;
 } LIBSYSTEMD_226;
+
+LIBSYSTEMD_228 {
+global:
+        sd_event_get_iteration;
+} LIBSYSTEMD_227;
