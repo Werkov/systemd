@@ -3867,6 +3867,21 @@ int unit_kill_context(
                                                   CGROUP_IGNORE_SELF,
                                                   pid_set,
                                                   NULL, NULL);
+
+                        } else if (k == KILL_KILL) {
+                                Iterator i;
+                                void *p;
+
+                                SET_FOREACH(p, pid_set, i) {
+                                        _cleanup_free_ char *comm = NULL;
+                                        pid_t pid = PTR_TO_PID(p);
+
+                                        if (pid == main_pid || pid == control_pid)
+                                                continue;
+
+                                        get_process_comm(pid, &comm);
+                                        log_unit_error(u, "FOO: %s ignored TERM signal, killed.", strna(comm));
+                                }
                         }
                 }
         }
