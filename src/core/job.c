@@ -576,6 +576,7 @@ int job_run_and_invalidate(Job *j) {
         if (!job_is_runnable(j))
                 return -EAGAIN;
 
+        job_start_timer(j);
         job_set_state(j, JOB_RUNNING);
         job_add_to_dbus_queue(j);
 
