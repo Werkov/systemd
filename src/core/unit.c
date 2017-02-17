@@ -99,6 +99,7 @@ Unit *unit_new(Manager *m, size_t size) {
         u->on_failure_job_mode = JOB_REPLACE;
         u->cgroup_inotify_wd = -1;
         u->job_timeout = USEC_INFINITY;
+        u->job_running_timeout = USEC_INFINITY;
         u->ref_uid = UID_INVALID;
         u->ref_gid = GID_INVALID;
         u->cpu_usage_last = NSEC_INFINITY;
@@ -1327,6 +1328,10 @@ int unit_load(Unit *u) {
                         log_unit_error(u, "More than one OnFailure= dependencies specified but OnFailureJobMode=isolate set. Refusing.");
                         r = -EINVAL;
                         goto fail;
+                }
+
+                if (u->job_running_timeout != USEC_INFINITY && u->job_running_timeout > u->job_timeout) {
+                        log_unit_warning(u, "JobRunningTimeout is greater than JobTimeout, the latter will override.");
                 }
 
                 unit_update_cgroup_members_masks(u);
