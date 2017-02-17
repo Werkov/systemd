@@ -161,6 +161,7 @@ struct Unit {
         Job *nop_job;
 
         usec_t job_timeout;
+        usec_t job_running_timeout;
 
         /* References to this */
         LIST_HEAD(UnitRef, refs);

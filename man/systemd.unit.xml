@@ -853,6 +853,7 @@
 
                         <varlistentry>
                                 <term><varname>JobTimeoutSec=</varname></term>
+                                <term><varname>JobRunningTimeoutSec=</varname></term>
 
                                 <listitem><para>When clients are
                                 waiting for a job of this unit to
@@ -876,7 +877,12 @@
                                 timeout set with this option however
                                 is useful to abort only the job
                                 waiting for the unit state to
-                                change.</para></listitem>
+                                change.
+                                <varname>JobRunningTimeoutSec=</varname> starts
+                                counting when the queued job is actually
+                                started, otherwise behavior upon termination is
+                                same as for
+                                <varname>JobTimeoutSec=</varname>.</para></listitem>
                         </varlistentry>
 
                         <varlistentry>
