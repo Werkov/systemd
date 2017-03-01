@@ -1329,6 +1329,10 @@ int unit_load(Unit *u) {
                         goto fail;
                 }
 
+                if (u->job_running_timeout != USEC_INFINITY && u->job_running_timeout > u->job_timeout) {
+                        log_unit_warning(u, "JobRunningTimeout is greater than JobTimeout, the latter will override.");
+                }
+
                 unit_update_cgroup_members_masks(u);
         }
 
