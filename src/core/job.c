@@ -946,35 +946,26 @@ static int job_dispatch_timer(sd_event_source *s, uint64_t monotonic, void *user
         return 0;
 }
 
-int job_start_timer(Job *j, bool running) {
+
+int job_start_timer(Job *j, bool job_running) {
         int r;
         usec_t run_begin, timeout_time;
 
-        if (running) {
+        if (job_running) {
                 if (j->unit->job_running_timeout == USEC_INFINITY)
                         return 0;
 
                 run_begin = now(CLOCK_MONOTONIC);
 
-                if (!j->timer_event_source) {
-                        r = sd_event_add_time(
-                                        j->manager->event,
-                                        &j->timer_event_source,
-                                        CLOCK_MONOTONIC,
-                                        usec_add(run_begin, j->unit->job_running_timeout), 0,
-                                        job_dispatch_timer, j);
-                        if (r < 0)
-                                return r;
-                        (void) sd_event_source_set_description(j->timer_event_source, "job-start");
-                } else {
-                        /* Only if JobRunningTimeout results in earlier timeout, update */
+                if (j->timer_event_source) {
+                        /* Update only if JobRunningTimeout results in earlier timeout */
                         (void) sd_event_source_get_time(j->timer_event_source, &timeout_time);
                         if (timeout_time <= run_begin + j->unit->job_running_timeout)
-                                return 0
+                                return 0;
                         r = sd_event_source_set_time(j->timer_event_source, run_begin + j->unit->job_running_timeout);
-                        if (r < 0)
-                                return r;
+                        return r;
                 }
+                timeout_time = usec_add(run_begin, j->unit->job_running_timeout);
         } else {
                 if (j->timer_event_source)
                         return 0;
@@ -984,17 +975,19 @@ int job_start_timer(Job *j, bool running) {
                 if (j->unit->job_timeout == USEC_INFINITY)
                         return 0;
 
-                r = sd_event_add_time(
-                                j->manager->event,
-                                &j->timer_event_source,
-                                CLOCK_MONOTONIC,
-                                usec_add(j->begin_usec, j->unit->job_timeout), 0,
-                                job_dispatch_timer, j);
-                if (r < 0)
-                        return r;
-
-                (void) sd_event_source_set_description(j->timer_event_source, "job-start");
+                timeout_time = usec_add(j->begin_usec, j->unit->job_timeout);
         }
+
+        r = sd_event_add_time(
+                        j->manager->event,
+                        &j->timer_event_source,
+                        CLOCK_MONOTONIC,
+                        timeout_time, 0,
+                        job_dispatch_timer, j);
+        if (r < 0)
+                return r;
+
+        (void) sd_event_source_set_description(j->timer_event_source, "job-start");
 
         return 0;
 }
