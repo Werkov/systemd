@@ -33,6 +33,7 @@
 #include "stat-util.h"
 #include "string-util.h"
 #include "swap.h"
+#include "special.h"
 #include "udev-util.h"
 #include "unit-name.h"
 #include "unit.h"
@@ -334,6 +335,37 @@ static int device_add_udev_wants(Unit *u, struct udev_device *dev) {
         }
 }
 
+static int device_add_udev_mounts_for(Unit *u, struct udev_device *dev) {
+        const char *path, *p;
+        int r;
+        assert(u);
+        assert(dev);
+
+        if (MANAGER_IS_USER(u->manager))
+                return 0;
+        // TODO document this variable
+        path = udev_device_get_property_value(dev, "SYSTEMD_REQUIRES_MOUNTS_FOR");
+        for (p = path;; ) {
+                _cleanup_free_ char *word = NULL;
+
+                r = extract_first_word(&p, &word, NULL, EXTRACT_QUOTES);
+                if (r == 0)
+                        return 0;
+                if (r == -ENOMEM)
+                        return log_oom();
+                if (r < 0)
+                        return log_unit_error_errno(u, r, "Failed to parse SYSTEMD_REQUIRES_MOUNTS_FOR: %m");
+                r = unit_require_mounts_for(u, word, UNIT_DEPENDENCY_UDEV);
+                if (r < 0)
+                        return log_unit_error_errno(u, r, "Fail to add mounts for: %m");
+                unit_add_to_load_queue(u);
+                /* A conflict with umount.target ensure this unit appears in the
+                 * shutdown transaction so that it contributes transitive ordering
+                 * between mounts it uses and mounts using it. */
+                r = unit_add_dependency_by_name(u, UNIT_CONFLICTS, SPECIAL_UMOUNT_TARGET, NULL, true, UNIT_DEPENDENCY_UDEV);
+        }
+}
+
 static bool device_is_bound_by_mounts(Device *d, struct udev_device *dev) {
         const char *bound_by;
         int r;
@@ -437,6 +469,9 @@ static int device_setup_unit(Manager *m, struct udev_device *dev, const char *pa
                  * for the main object */
                 if (main)
                         (void) device_add_udev_wants(u, dev);
+                /* requires_mounts_for is needed on every alias so
+                 * that the 'After' ordering has effect */
+                (void) device_add_udev_mounts_for(u, dev);
         }
 
         /* So the user wants the mount units to be bound to the device but a mount unit might has been seen by systemd
