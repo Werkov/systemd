@@ -111,7 +111,8 @@ static void device_init(Unit *u) {
          * for devices by default. This is because they otherwise wait
          * indefinitely for plugged in devices, something which cannot
          * happen for the other units since their operations time out
-         * anyway. */
+         * anyway.
+         * JobRunningTimeout= is set in unit_check_job_timeouts(). */
         u->job_timeout = u->manager->default_timeout_start_usec;
 
         u->ignore_on_isolate = true;

@@ -1282,6 +1282,19 @@ static int unit_add_startup_units(Unit *u) {
         return set_put(u->manager->startup_units, u);
 }
 
+static void unit_check_job_timeouts(Unit *u) {
+        if (u->job_running_timeout <= u->job_timeout)
+                return;
+
+        /* Only device units have finite job timeout by default, for backwards
+         * compatibility interpret JobTimeoutSec= as JobRunningTimeoutSec= */
+        if (u->type == UNIT_DEVICE) {
+                u->job_running_timeout = u->job_timeout;
+                u->job_timeout = USEC_INFINITY;
+        } else if (u->job_running_timeout != USEC_INFINITY)
+                log_unit_warning(u, "JobRunningTimeoutSec= is greater than JobTimeoutSec=, it has no effect.");
+}
+
 int unit_load(Unit *u) {
         int r;
 
@@ -1344,8 +1357,7 @@ int unit_load(Unit *u) {
                         goto fail;
                 }
 
-                if (u->job_running_timeout != USEC_INFINITY && u->job_running_timeout > u->job_timeout)
-                        log_unit_warning(u, "JobRunningTimeoutSec= is greater than JobTimeoutSec=, it has no effect.");
+                unit_check_job_timeouts(u);
 
                 unit_update_cgroup_members_masks(u);
         }
