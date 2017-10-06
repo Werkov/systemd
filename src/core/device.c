@@ -310,6 +310,32 @@ static void device_dump(Unit *u, FILE *f, const char *prefix) {
         }
 }
 
+static int device_stop(Unit *u) {
+        Device *d = DEVICE(u);
+        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        Unit *trigger;
+        int r;
+
+        assert(d);
+        assert(IN_SET(d->state, DEVICE_TENTATIVE, DEVICE_PLUGGED));
+
+        trigger = UNIT_TRIGGER(UNIT(d));
+        if (!trigger) {
+                goto done;
+        }
+
+        r = manager_add_job(u->manager, JOB_START, trigger, JOB_REPLACE, &error, NULL);
+        if (r < 0)
+                goto fail;
+done:
+        return 1; // TODO what should we return?
+
+fail:
+        log_unit_warning(u, "Failed to queue OnDeactivation= job: %s", bus_error_message(&error, r));
+        /* Swallow the error code and propagate OK status */
+        return 1;
+}
+
 _pure_ static UnitActiveState device_active_state(Unit *u) {
         assert(u);
 
@@ -1068,6 +1094,8 @@ const UnitVTable device_vtable = {
         .deserialize_item = device_deserialize_item,
 
         .dump = device_dump,
+
+        .stop = device_stop,
 
         .active_state = device_active_state,
         .sub_state_to_string = device_sub_state_to_string,
