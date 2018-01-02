@@ -428,6 +428,8 @@ static void timer_enter_waiting(Timer *t, TimerWaitingFlags flags) {
 
                                 if (base <= 0)
                                         base = t->last_trigger.monotonic;
+                                else if (flags & TIMER_TRIGGER_FAILURE)
+                                        base = MAX(base, t->last_trigger.monotonic);
 
                                 if (base <= 0)
                                         continue;
@@ -440,6 +442,8 @@ static void timer_enter_waiting(Timer *t, TimerWaitingFlags flags) {
 
                                 if (base <= 0)
                                         base = t->last_trigger.monotonic;
+                                else if (flags & TIMER_TRIGGER_FAILURE)
+                                        base = MAX(base, t->last_trigger.monotonic);
 
                                 if (base <= 0)
                                         continue;
@@ -772,14 +776,20 @@ static void timer_trigger_notify(Unit *u, Unit *other) {
         case TIMER_ELAPSED:
 
                 /* Recalculate sleep time */
-                timer_enter_waiting(t, 0);
+                if (unit_active_state(other) == UNIT_FAILED)
+                        timer_enter_waiting(t, TIMER_TRIGGER_FAILURE);
+                else
+                        timer_enter_waiting(t, 0);
                 break;
 
         case TIMER_RUNNING:
 
                 if (UNIT_IS_INACTIVE_OR_FAILED(unit_active_state(other))) {
                         log_unit_debug(UNIT(t), "Got notified about unit deactivation.");
-                        timer_enter_waiting(t, 0);
+                        if (unit_active_state(other) == UNIT_FAILED)
+                                timer_enter_waiting(t, TIMER_TRIGGER_FAILURE);
+                        else
+                                timer_enter_waiting(t, 0);
                 }
                 break;
 

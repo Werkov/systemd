@@ -55,7 +55,8 @@ typedef enum TimerResult {
 } TimerResult;
 
 typedef enum TimerWaitingFlags {
-        TIMER_INITIAL =         1 << 0,
+        TIMER_INITIAL         = 1 << 0,
+        TIMER_TRIGGER_FAILURE = 1 << 1,
 } TimerWaitingFlags;
 
 struct Timer {
