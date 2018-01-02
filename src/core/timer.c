@@ -280,7 +280,7 @@ static void timer_set_state(Timer *t, TimerState state) {
         unit_notify(UNIT(t), state_translation_table[old_state], state_translation_table[state], true);
 }
 
-static void timer_enter_waiting(Timer *t, bool initial);
+static void timer_enter_waiting(Timer *t, TimerWaitingFlags flags);
 
 static int timer_coldplug(Unit *u) {
         Timer *t = TIMER(u);
@@ -292,7 +292,7 @@ static int timer_coldplug(Unit *u) {
                 return 0;
 
         if (t->deserialized_state == TIMER_WAITING)
-                timer_enter_waiting(t, false);
+                timer_enter_waiting(t, 0);
         else
                 timer_set_state(t, t->deserialized_state);
 
@@ -350,7 +350,7 @@ static void add_random(Timer *t, usec_t *v) {
         log_unit_debug(UNIT(t), "Adding %s random time.", format_timespan(s, sizeof(s), add, 0));
 }
 
-static void timer_enter_waiting(Timer *t, bool initial) {
+static void timer_enter_waiting(Timer *t, TimerWaitingFlags flags) {
         bool found_monotonic = false, found_realtime = false;
         bool leave_around = false;
         triple_timestamp ts;
@@ -452,7 +452,7 @@ static void timer_enter_waiting(Timer *t, bool initial) {
 
                         v->next_elapse = usec_add(usec_shift_clock(base, CLOCK_MONOTONIC, TIMER_MONOTONIC_CLOCK(t)), v->value);
 
-                        if (!initial &&
+                        if (!(flags & TIMER_INITIAL) &&
                             v->next_elapse < triple_timestamp_by_clock(&ts, TIMER_MONOTONIC_CLOCK(t)) &&
                             IN_SET(v->base, TIMER_ACTIVE, TIMER_BOOT, TIMER_STARTUP)) {
                                 /* This is a one time trigger, disable it now */
@@ -650,7 +650,7 @@ static int timer_start(Unit *u) {
         }
 
         t->result = TIMER_SUCCESS;
-        timer_enter_waiting(t, true);
+        timer_enter_waiting(t, TIMER_INITIAL);
         return 1;
 }
 
@@ -772,14 +772,14 @@ static void timer_trigger_notify(Unit *u, Unit *other) {
         case TIMER_ELAPSED:
 
                 /* Recalculate sleep time */
-                timer_enter_waiting(t, false);
+                timer_enter_waiting(t, 0);
                 break;
 
         case TIMER_RUNNING:
 
                 if (UNIT_IS_INACTIVE_OR_FAILED(unit_active_state(other))) {
                         log_unit_debug(UNIT(t), "Got notified about unit deactivation.");
-                        timer_enter_waiting(t, false);
+                        timer_enter_waiting(t, 0);
                 }
                 break;
 
@@ -812,7 +812,7 @@ static void timer_time_change(Unit *u) {
                 return;
 
         log_unit_debug(u, "Time change, recalculating next elapse.");
-        timer_enter_waiting(t, false);
+        timer_enter_waiting(t, 0);
 }
 
 static const char* const timer_base_table[_TIMER_BASE_MAX] = {

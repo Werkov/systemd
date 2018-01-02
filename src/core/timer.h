@@ -54,6 +54,10 @@ typedef enum TimerResult {
         _TIMER_RESULT_INVALID = -1
 } TimerResult;
 
+typedef enum TimerWaitingFlags {
+        TIMER_INITIAL =         1 << 0,
+} TimerWaitingFlags;
+
 struct Timer {
         Unit meta;
 
