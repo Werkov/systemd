@@ -434,7 +434,7 @@ Path.Unit,                       config_parse_trigger_unit,          0,         
 Path.MakeDirectory,              config_parse_bool,                  0,                             offsetof(Path, make_directory)
 Path.DirectoryMode,              config_parse_mode,                  0,                             offsetof(Path, directory_mode)
 m4_dnl
-Device.OnDeactivation,           config_parse_trigger_unit,          0,                             0
+Device.OnDeactivation,           config_parse_trigger_unit,          NO_ORDERING,                   0
 m4_dnl
 CGROUP_CONTEXT_CONFIG_ITEMS(Slice)m4_dnl
 m4_dnl

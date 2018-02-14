@@ -135,3 +135,7 @@ typedef enum Disabled {
         DISABLED_LEGACY,
         DISABLED_EXPERIMENTAL,
 } Disabled;
+
+typedef enum ConfigDependencyFlags {
+        NO_ORDERING = 0x1,
+} ConfigDependencyFlags;
