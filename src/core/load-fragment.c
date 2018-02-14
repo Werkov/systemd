@@ -1533,6 +1533,7 @@ int config_parse_trigger_unit(
                 void *userdata) {
 
         _cleanup_free_ char *p = NULL;
+        ConfigDependencyFlags dep_flags = ltype;
         Unit *u = data;
         UnitType type;
         int r;
@@ -1563,7 +1564,11 @@ int config_parse_trigger_unit(
                 return 0;
         }
 
-        r = unit_add_two_dependencies_by_name(u, UNIT_BEFORE, UNIT_TRIGGERS, p, true, UNIT_DEPENDENCY_FILE);
+        if (dep_flags & NO_ORDERING)
+                r = unit_add_dependency_by_name(u, UNIT_TRIGGERS, p, true, UNIT_DEPENDENCY_FILE);
+        else
+                r = unit_add_two_dependencies_by_name(u, UNIT_BEFORE, UNIT_TRIGGERS, p, true, UNIT_DEPENDENCY_FILE);
+
         if (r < 0) {
                 log_syntax(unit, LOG_ERR, filename, line, r, "Failed to add trigger on %s, ignoring: %m", p);
                 return 0;

@@ -110,3 +110,7 @@ CONFIG_PARSER_PROTOTYPE(config_parse_disable_controllers);
 /* gperf prototypes */
 const struct ConfigPerfItem* load_fragment_gperf_lookup(const char *key, GPERF_LEN_TYPE length);
 extern const char load_fragment_gperf_nulstr[];
+
+typedef enum ConfigDependencyFlags {
+        NO_ORDERING = 0x1,
+} ConfigDependencyFlags;
