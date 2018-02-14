@@ -1728,7 +1728,52 @@ int manager_startup(Manager *m, FILE *serialization, FDSet *fds) {
         return 0;
 }
 
+int manager_add_job_set(Manager *m, JobType type, Set *unit_set, JobMode mode, sd_bus_error *e, Set *jobs) {
+        int r;
+
+        assert(m);
+        assert(type < _JOB_TYPE_MAX);
+        assert(unit_set);
+        assert(mode < _JOB_MODE_MAX);
+
+        // TODO implement with manager_add_job_internal
+}
+
 int manager_add_job(Manager *m, JobType type, Unit *unit, JobMode mode, sd_bus_error *e, Job **_ret) {
+        int r;
+        Job *job;
+        _cleanup_set_free_ Set *unit_set;
+        _cleanup_set_free_ Set *job_set;
+
+        assert(m);
+        assert(type < _JOB_TYPE_MAX);
+        assert(unit);
+        assert(mode < _JOB_MODE_MAX);
+
+        unit_set = set_new(NULL);
+        if (!unit_set)
+                return -ENOMEM;
+
+        job_set = set_new(NULL);
+        if (!job_set)
+                return -ENOMEM;
+
+        r = set_put(unit_set, (void *)unit);
+        if (r < 0)
+                return r;
+
+        r = manager_add_job_set(m, type, unit_set, mode, e, job_set);
+        if (r < 0)
+                return r;
+
+        assert(!set_isempty(job_set))
+        if (_ret)
+                *_ret = (Job *)set_steal_first(job_set);
+
+        return 0;
+}
+
+static int manager_add_job_internal(Manager *m, JobType type, Unit *unit, JobMode mode, sd_bus_error *e, Job **_ret) {
         int r;
         Transaction *tr;
 
