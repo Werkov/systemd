@@ -1880,7 +1880,7 @@ int manager_propagate_reload(Manager *m, Unit *unit, JobMode mode, sd_bus_error 
                 goto tr_abort;
 
         /* Failure in adding individual dependencies is ignored, so this always succeeds. */
-        transaction_add_propagate_reload_jobs(tr, unit, tr->anchor_job, mode == JOB_IGNORE_DEPENDENCIES, e);
+        transaction_add_propagate_reload_jobs(tr, unit, set_first(tr->anchor_jobs), mode == JOB_IGNORE_DEPENDENCIES, e);
 
         r = transaction_activate(tr, m, mode, e);
         if (r < 0)

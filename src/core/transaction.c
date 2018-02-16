@@ -44,7 +44,7 @@ void transaction_abort(Transaction *tr) {
         assert(hashmap_isempty(tr->jobs));
 }
 
-static void transaction_find_jobs_that_matter_to_anchor(Job *j, unsigned generation) {
+static void transaction_find_jobs_that_matter_to_job(Job *j, unsigned generation) {
         JobDependency *l;
 
         /* A recursive sweep through the graph that marks all units
@@ -67,6 +67,13 @@ static void transaction_find_jobs_that_matter_to_anchor(Job *j, unsigned generat
 
                 transaction_find_jobs_that_matter_to_anchor(l->object, generation);
         }
+}
+
+static void transaction_find_jobs_that_matter_to_anchor(Transaction *tr, unsigned generation) {
+        Iterator i;
+        Job j;
+        SET_FOREACH(j, tr->anchor_jobs, i)
+                transaction_find_jobs_that_matter_to_job(j, generation); // TODO check generation can be equal for anchor_jobs
 }
 
 static void transaction_merge_and_delete_job(Transaction *tr, Job *j, Job *other, JobType t) {
@@ -264,7 +271,7 @@ static int transaction_merge_jobs(Transaction *tr, sd_bus_error *e) {
                         assert_se(job_type_merge_and_collapse(&t, k->type, j->unit) == 0);
 
                 while ((k = j->transaction_next)) {
-                        if (tr->anchor_job == k) {
+                        if (set_contains(tr->anchor_jobs, k)) {
                                 transaction_merge_and_delete_job(tr, k, j, t);
                                 j = k;
                         } else
@@ -294,7 +301,7 @@ rescan:
 
                 LIST_FOREACH(transaction, k, j) {
 
-                        if (tr->anchor_job == k ||
+                        if (set_contains(tr->anchor_jobs, k) ||
                             !job_type_is_redundant(k->type, unit_active_state(k->unit)) ||
                             (k->unit->job && job_type_is_conflicting(k->type, k->unit->job->type)))
                                 goto next_unit;
@@ -494,7 +501,7 @@ static void transaction_collect_garbage(Transaction *tr) {
 
 rescan:
         HASHMAP_FOREACH(j, tr->jobs, i) {
-                if (tr->anchor_job == j || j->object_list) {
+                if (set_contains(tr->anchor_jobs, j) || j->object_list) {
                         /* log_debug("Keeping job %s/%s because of %s/%s", */
                         /*           j->unit->id, job_type_to_string(j->type), */
                         /*           j->object_list->subject ? j->object_list->subject->unit->id : "root", */
@@ -525,9 +532,9 @@ static int transaction_is_destructive(Transaction *tr, JobMode mode, sd_bus_erro
 
                 if (j->unit->job && (mode == JOB_FAIL || j->unit->job->irreversible) &&
                     job_type_is_conflicting(j->unit->job->type, j->type))
+                        // TODO list all anchor jobs in the message
                         return sd_bus_error_setf(e, BUS_ERROR_TRANSACTION_IS_DESTRUCTIVE,
-                                                 "Transaction for %s/%s is destructive (%s has '%s' job queued, but '%s' is included in transaction).",
-                                                 tr->anchor_job->unit->id, job_type_to_string(tr->anchor_job->type),
+                                                 "Transaction for is destructive (%s has '%s' job queued, but '%s' is included in transaction).",
                                                  j->unit->id, job_type_to_string(j->unit->job->type), job_type_to_string(j->type));
         }
 
@@ -633,8 +640,9 @@ static int transaction_apply(Transaction *tr, Manager *m, JobMode mode) {
                 installed_job = job_install(j);
                 if (installed_job != j) {
                         /* j has been merged into a previously installed job */
-                        if (tr->anchor_job == j)
-                                tr->anchor_job = installed_job;
+                        if (set_contains(tr->anchor_jobs, j)
+                                (void) set_remove_and_put(tr->anchor_jobs, j, installed_job);
+
                         hashmap_remove(m->jobs, UINT32_TO_PTR(j->id));
                         job_free(j);
                         j = installed_job;
@@ -674,7 +682,7 @@ int transaction_activate(Transaction *tr, Manager *m, JobMode mode, sd_bus_error
                 j->generation = 0;
 
         /* First step: figure out which jobs matter */
-        transaction_find_jobs_that_matter_to_anchor(tr->anchor_job, generation++);
+        transaction_find_jobs_that_matter_to_anchor(tr, generation++);
 
         /* Second step: Try not to stop any running services if
          * we don't have to. Don't try to reverse running
@@ -926,8 +934,9 @@ int transaction_add_job_and_dependencies(
                         return -ENOMEM;
         } else {
                 /* If the job has no parent job, it is the anchor job. */
-                assert(!tr->anchor_job);
-                tr->anchor_job = ret;
+                r = set_put(tr->anchor_jobs, ret);
+                if (r < 0)
+                        return r; // TODO check we don't leak anything allocated above
         }
 
         if (is_new && !ignore_requirements && type != JOB_NOP) {
@@ -1088,7 +1097,7 @@ int transaction_add_isolate_jobs(Transaction *tr, Manager *m) {
                 if (hashmap_get(tr->jobs, u))
                         continue;
 
-                r = transaction_add_job_and_dependencies(tr, JOB_STOP, u, tr->anchor_job, true, false, false, false, NULL);
+                r = transaction_add_job_and_dependencies_by_set(tr, JOB_STOP, u, tr->anchor_jobs, true, false, false, false, NULL);
                 if (r < 0)
                         log_unit_warning_errno(u, r, "Cannot add isolate job, ignoring: %m");
         }
@@ -1105,15 +1114,26 @@ Transaction *transaction_new(bool irreversible) {
 
         tr->jobs = hashmap_new(NULL);
         if (!tr->jobs)
-                return mfree(tr);
+                goto fail;
+
+        tr->anchor_jobs = set_new(NULL);
+        if (!tr->anchor_jobs)
+                goto fail_jobs;
 
         tr->irreversible = irreversible;
 
         return tr;
+fail_jobs:
+                mfree(tr->jobs);
+fail:
+        return mfree(tr);
 }
 
 void transaction_free(Transaction *tr) {
         assert(hashmap_isempty(tr->jobs));
+        assert(hashmap_isempty(tr->anchor_jobs)); // TODO think about this
+
+        set_free(tr->anchor_jobs);
         hashmap_free(tr->jobs);
         free(tr);
 }
