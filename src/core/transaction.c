@@ -72,9 +72,9 @@ static void transaction_find_jobs_that_matter_to_anchor_one(Job *j, unsigned gen
 
 static void transaction_find_jobs_that_matter_to_anchor(Transaction *tr, unsigned generation) {
         Iterator i;
-        Job j;
+        Job *j;
         SET_FOREACH(j, tr->anchor_jobs, i)
-                transaction_find_jobs_that_matter_to_anchor_one(&j, generation); // TODO check generation can be equal for anchor_jobs
+                transaction_find_jobs_that_matter_to_anchor_one(j, generation); // TODO check generation can be equal for anchor_jobs
 }
 
 static void transaction_merge_and_delete_job(Transaction *tr, Job *j, Job *other, JobType t) {

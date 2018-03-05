@@ -1730,14 +1730,73 @@ int manager_startup(Manager *m, FILE *serialization, FDSet *fds) {
 
 int manager_add_job_set(Manager *m, JobType type, Set *unit_set, JobMode mode, sd_bus_error *e, Set *jobs) {
         int r;
+        Iterator i;
+        Unit *u;
+        Job *j;
+        JobType merged_type;
+        Transaction *tr;
 
         assert(m);
         assert(type < _JOB_TYPE_MAX);
         assert(unit_set);
         assert(mode < _JOB_MODE_MAX);
 
-        // TODO implement with manager_add_job_internal
-        r = -ENOTSUP;
+        if (mode == JOB_ISOLATE) {
+                if (type != JOB_START)
+                        return sd_bus_error_setf(e, SD_BUS_ERROR_INVALID_ARGS, "Isolate is only valid for start.");
+
+                SET_FOREACH(u, unit_set, i) {
+                        if (!u->allow_isolate)
+                                return sd_bus_error_setf(e, BUS_ERROR_NO_ISOLATION, "Operation refused, unit %s may not be isolated.", u->id);
+                }
+        }
+
+        SET_FOREACH(u, unit_set, i)
+                log_unit_debug(u, "Trying to enqueue job %s/%s/%s", u->id, job_type_to_string(type), job_mode_to_string(mode));
+
+
+        tr = transaction_new(mode == JOB_REPLACE_IRREVERSIBLY);
+        if (!tr)
+                return -ENOMEM;
+
+        SET_FOREACH(u, unit_set, i) {
+                merged_type = job_type_collapse(type, u);
+                r = transaction_add_job_and_dependencies(tr, merged_type, u, NULL, true, false,
+                                                         IN_SET(mode, JOB_IGNORE_DEPENDENCIES, JOB_IGNORE_REQUIREMENTS),
+                                                         mode == JOB_IGNORE_DEPENDENCIES, e);
+                if (r < 0)
+                        goto tr_abort;
+        }
+
+        if (mode == JOB_ISOLATE) {
+                r = transaction_add_isolate_jobs(tr, m);
+                if (r < 0)
+                        goto tr_abort;
+        }
+
+        r = transaction_activate(tr, m, mode, e);
+        if (r < 0)
+                goto tr_abort;
+
+        if (jobs) {
+                /* anchor_jobs would be destroyed anyway so steal the contents */
+                // TODO check against leaks and use after free
+                r = set_move(jobs, tr->anchor_jobs);
+                if (r < 0)
+                        goto tr_abort;
+        }
+
+        SET_FOREACH(j, tr->anchor_jobs, i)
+                log_unit_debug(j->unit,
+                               "Enqueued job %s/%s as %u", j->unit->id,
+                               job_type_to_string(type), (unsigned) j->id);
+
+        transaction_free(tr);
+        return 0;
+
+tr_abort:
+        transaction_abort(tr);
+        transaction_free(tr);
         return r;
 }
 
@@ -1774,62 +1833,6 @@ int manager_add_job(Manager *m, JobType type, Unit *unit, JobMode mode, sd_bus_e
         // TODO check refcount for the job
 
         return 0;
-}
-
-static int manager_add_job_internal(Manager *m, JobType type, Unit *unit, JobMode mode, sd_bus_error *e, Job **_ret) {
-        return -ENOTSUP;
-//        int r;
-//        Transaction *tr;
-//
-//        assert(m);
-//        assert(type < _JOB_TYPE_MAX);
-//        assert(unit);
-//        assert(mode < _JOB_MODE_MAX);
-//
-//        if (mode == JOB_ISOLATE && type != JOB_START)
-//                return sd_bus_error_setf(e, SD_BUS_ERROR_INVALID_ARGS, "Isolate is only valid for start.");
-//
-//        if (mode == JOB_ISOLATE && !unit->allow_isolate)
-//                return sd_bus_error_setf(e, BUS_ERROR_NO_ISOLATION, "Operation refused, unit may not be isolated.");
-//
-//        log_unit_debug(unit, "Trying to enqueue job %s/%s/%s", unit->id, job_type_to_string(type), job_mode_to_string(mode));
-//
-//        type = job_type_collapse(type, unit);
-//
-//        tr = transaction_new(mode == JOB_REPLACE_IRREVERSIBLY);
-//        if (!tr)
-//                return -ENOMEM;
-//
-//        r = transaction_add_job_and_dependencies(tr, type, unit, NULL, true, false,
-//                                                 IN_SET(mode, JOB_IGNORE_DEPENDENCIES, JOB_IGNORE_REQUIREMENTS),
-//                                                 mode == JOB_IGNORE_DEPENDENCIES, e);
-//        if (r < 0)
-//                goto tr_abort;
-//
-//        if (mode == JOB_ISOLATE) {
-//                r = transaction_add_isolate_jobs(tr, m);
-//                if (r < 0)
-//                        goto tr_abort;
-//        }
-//
-//        r = transaction_activate(tr, m, mode, e);
-//        if (r < 0)
-//                goto tr_abort;
-//
-//        log_unit_debug(unit,
-//                       "Enqueued job %s/%s as %u", unit->id,
-//                       job_type_to_string(type), (unsigned) tr->anchor_job->id);
-//
-//        if (_ret)
-//                *_ret = tr->anchor_job;
-//
-//        transaction_free(tr);
-//        return 0;
-//
-//tr_abort:
-//        transaction_abort(tr);
-//        transaction_free(tr);
-//        return r;
 }
 
 int manager_add_job_by_name(Manager *m, JobType type, const char *name, JobMode mode, sd_bus_error *e, Job **ret) {
