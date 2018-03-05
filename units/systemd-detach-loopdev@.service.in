@@ -1,0 +1,7 @@
+[Unit]
+Description=Detach loop device %i
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=@rootlibexecdir@/systemd-detach-loopdev.sh %i
