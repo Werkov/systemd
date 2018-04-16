@@ -1745,6 +1745,9 @@ int manager_add_job_set(Manager *m, JobType type, Set *unit_set, JobMode mode, s
                 if (type != JOB_START)
                         return sd_bus_error_setf(e, SD_BUS_ERROR_INVALID_ARGS, "Isolate is only valid for start.");
 
+                if (set_size(unit_set) > 1)
+                        return sd_bus_error_setf(e, SD_BUS_ERROR_NOT_SUPPORTED, "Isolating more than one unit is not supported.");
+
                 SET_FOREACH(u, unit_set, i) {
                         if (!u->allow_isolate)
                                 return sd_bus_error_setf(e, BUS_ERROR_NO_ISOLATION, "Operation refused, unit %s may not be isolated.", u->id);
@@ -1780,7 +1783,6 @@ int manager_add_job_set(Manager *m, JobType type, Set *unit_set, JobMode mode, s
 
         if (jobs) {
                 /* anchor_jobs would be destroyed anyway so steal the contents */
-                // TODO check against leaks and use after free
                 r = set_move(jobs, tr->anchor_jobs);
                 if (r < 0)
                         goto tr_abort;
@@ -1830,7 +1832,6 @@ int manager_add_job(Manager *m, JobType type, Unit *unit, JobMode mode, sd_bus_e
         assert(!set_isempty(job_set));
         if (_ret)
                 *_ret = (Job *)set_steal_first(job_set);
-        // TODO check refcount for the job
 
         return 0;
 }

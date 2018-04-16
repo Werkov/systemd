@@ -20,6 +20,7 @@ static void transaction_delete_job(Transaction *tr, Job *j, bool delete_dependen
         /* Deletes one job from the transaction */
 
         transaction_unlink_job(tr, j, delete_dependencies);
+        (void) set_remove(tr->anchor_jobs, j);
 
         job_free(j);
 }
@@ -871,20 +872,6 @@ void transaction_add_propagate_reload_jobs(Transaction *tr, Unit *unit, Job *by,
         }
 }
 
-static int transaction_add_job_and_dependencies_by_set(
-                Transaction *tr,
-                JobType type,
-                Unit *unit,
-                Set *by_set,
-                bool matters,
-                bool conflicts,
-                bool ignore_requirements,
-                bool ignore_order,
-                sd_bus_error *e) {
-        // TODO just a dummy placeholder
-        return -ENOTSUP;
-}
-
 int transaction_add_job_and_dependencies(
                 Transaction *tr,
                 JobType type,
@@ -1094,6 +1081,7 @@ int transaction_add_isolate_jobs(Transaction *tr, Manager *m) {
 
         assert(tr);
         assert(m);
+        assert(set_size(tr->anchor_jobs) == 1);
 
         HASHMAP_FOREACH_KEY(u, k, m->units, i) {
 
@@ -1112,7 +1100,9 @@ int transaction_add_isolate_jobs(Transaction *tr, Manager *m) {
                 if (hashmap_get(tr->jobs, u))
                         continue;
 
-                r = transaction_add_job_and_dependencies_by_set(tr, JOB_STOP, u, tr->anchor_jobs, true, false, false, false, NULL); // TODO is it needed
+                /* We assume a single anchor for implementation simplicity but there is no reason why not add JOB_STOP
+                 * dependency to all of anchor jobs. */
+                r = transaction_add_job_and_dependencies(tr, JOB_STOP, u, set_first(tr->anchor_jobs), true, false, false, false, NULL);
                 if (r < 0)
                         log_unit_warning_errno(u, r, "Cannot add isolate job, ignoring: %m");
         }
@@ -1146,7 +1136,7 @@ fail:
 
 void transaction_free(Transaction *tr) {
         assert(hashmap_isempty(tr->jobs));
-        assert(set_isempty(tr->anchor_jobs)); // TODO think about this
+        assert(set_isempty(tr->anchor_jobs));
 
         set_free(tr->anchor_jobs);
         hashmap_free(tr->jobs);
