@@ -2793,8 +2793,7 @@ int unit_add_dependency(
 
         if ((d == UNIT_BEFORE && other->type == UNIT_DEVICE) ||
             (d == UNIT_AFTER && u->type == UNIT_DEVICE)) {
-                log_unit_warning(u, "Dependency Before=%s ignored (.device units cannot be delayed)", other->id);
-                return 0;
+                log_unit_info(u, "Dependency Before=%s (.device units not effectively delayed during start)", other->id);
         }
 
         r = unit_add_dependency_hashmap(u->dependencies + d, other, mask, 0);
