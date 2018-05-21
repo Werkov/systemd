@@ -1445,12 +1445,24 @@ static int mount_setup_new_unit(
 
         if (!mount_is_extrinsic(MOUNT(u))) {
                 const char *target;
+                bool order = false;
                 int r;
 
-                target = mount_is_network(p) ? SPECIAL_REMOTE_FS_TARGET : SPECIAL_LOCAL_FS_TARGET;
-                r = unit_add_dependency_by_name(u, UNIT_BEFORE, target, NULL, true, UNIT_DEPENDENCY_MOUNTINFO_IMPLICIT);
-                if (r < 0)
-                        return r;
+                if (mount_is_network(p)) {
+                        target = SPECIAL_REMOTE_FS_TARGET
+                        order = true;
+                } else if (mount_is_loop(p)) {
+                        /* If we didn't recognize network mount above, we can't tell if the loop device
+                         * is backed by local or remote data thus ignore any dependency at all. */
+                        order = false;
+                } else {
+                        order = true;
+                        target = SPECIAL_LOCAL_FS_TARGET;
+                }
+                if (order)
+                        r = unit_add_dependency_by_name(u, UNIT_BEFORE, target, NULL, true, UNIT_DEPENDENCY_MOUNTINFO_IMPLICIT);
+                        if (r < 0)
+                                return r;
 
                 r = unit_add_dependency_by_name(u, UNIT_CONFLICTS, SPECIAL_UMOUNT_TARGET, NULL, true, UNIT_DEPENDENCY_MOUNTINFO_IMPLICIT);
                 if (r < 0)
