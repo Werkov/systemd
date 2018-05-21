@@ -427,6 +427,7 @@ static int mount_add_default_dependencies(Mount *m) {
         UnitDependencyMask mask;
         MountParameters *p;
         int r;
+        bool order = true;
 
         assert(m);
 
@@ -473,14 +474,21 @@ static int mount_add_default_dependencies(Mount *m) {
                 after = SPECIAL_LOCAL_FS_PRE_TARGET;
                 before = SPECIAL_LOCAL_FS_TARGET;
         }
+        /* If we didn't recognize network mount above, we can't tell if the loop device
+         * is backed by local or remote data thus ignore any dependency at all. */
+        if (mount_is_loop(p))
+                order = false;
 
-        r = unit_add_dependency_by_name(UNIT(m), UNIT_BEFORE, before, true, mask);
-        if (r < 0)
-                return r;
+        // TODO review Wants=/Requires= besides ordering
+        if (order) {
+                r = unit_add_dependency_by_name(UNIT(m), UNIT_BEFORE, before, true, mask);
+                if (r < 0)
+                        return r;
 
-        r = unit_add_dependency_by_name(UNIT(m), UNIT_AFTER, after, true, mask);
-        if (r < 0)
-                return r;
+                r = unit_add_dependency_by_name(UNIT(m), UNIT_AFTER, after, true, mask);
+                if (r < 0)
+                        return r;
+        }
 
         r = unit_add_two_dependencies_by_name(UNIT(m), UNIT_BEFORE, UNIT_CONFLICTS, SPECIAL_UMOUNT_TARGET, true, mask);
         if (r < 0)
