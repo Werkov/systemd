@@ -30,6 +30,7 @@
 #if HAVE_SECCOMP
 #include "seccomp-util.h"
 #endif
+#include "set.h"
 #include "special.h"
 #include "strv.h"
 #include "strxcpyx.h"
@@ -1079,6 +1080,122 @@ static int analyze_time(int argc, char *argv[], void *userdata) {
         return 0;
 }
 
+static int unit_compare_to(sd_bus *bus, Set *seen_units, const char *name_a, const char *name_b) {
+        _cleanup_strv_free_ char **deps = NULL;
+        char **c;
+        int r;
+
+        //printf("%s,\t%s\n", name_a, name_b);
+        // TODO aliases?
+        if (streq(name_a, name_b))
+                return true;
+
+        r = set_put(seen_units, name_b);
+        if (r < 0)
+                return r;
+
+        r = list_dependencies_get_dependencies(bus, name_b, &deps);
+        if (r < 0)
+                return r;
+
+        STRV_FOREACH(c, deps) {
+                //printf(" %s -> %s\n", name_b, *c);
+                if (set_contains(seen_units, *c)) {
+                        continue;
+                }
+                r = unit_compare_to(bus, seen_units, name_a, *c);
+                if (r < 0)
+                        return r;
+                else if (r)
+                        return 1;
+        }
+
+        return 0;
+}
+
+static int analyze_unit_compare(int argc, char *argv[], void *userdata) {
+        _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
+        const char *id;
+        const char *name_a, *name_b;
+        _cleanup_free_ char *path = NULL;
+        _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
+        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        _cleanup_set_free_ Set *seen_units = NULL;
+        int r;
+
+        assert(argc == 3);
+        name_a = argv[1];
+        name_b = argv[2];
+
+        r = acquire_bus(&bus, NULL);
+        if (r < 0)
+                return log_error_errno(r, "Failed to create bus connection: %m");
+
+
+        (void) pager_open(arg_no_pager, false);
+
+        /* name A */
+        path = unit_dbus_path_from_name(name_a);
+        if (!path)
+                return -ENOMEM;
+
+        r = sd_bus_get_property(
+                        bus,
+                        "org.freedesktop.systemd1",
+                        path,
+                        "org.freedesktop.systemd1.Unit",
+                        "Id",
+                        &error,
+                        &reply,
+                        "s");
+        if (r < 0) {
+                log_error("Failed to get ID: %s", bus_error_message(&error, -r));
+                return r;
+        }
+
+        r = sd_bus_message_read(reply, "s", &id);
+        if (r < 0)
+                return bus_log_parse_error(r);
+
+        /* name B */
+        path = unit_dbus_path_from_name(name_b);
+        if (!path)
+                return -ENOMEM;
+
+        r = sd_bus_get_property(
+                        bus,
+                        "org.freedesktop.systemd1",
+                        path,
+                        "org.freedesktop.systemd1.Unit",
+                        "Id",
+                        &error,
+                        &reply,
+                        "s");
+        if (r < 0) {
+                log_error("Failed to get ID: %s", bus_error_message(&error, -r));
+                return r;
+        }
+
+        r = sd_bus_message_read(reply, "s", &id);
+        if (r < 0)
+                return bus_log_parse_error(r);
+
+        seen_units = set_new(&string_hash_ops);
+        if (!seen_units)
+                return -ENOMEM;
+
+        /* B after A */
+        if ((r = unit_compare_to(bus, seen_units, name_a, name_b)) > 0)
+                printf("%s is after %s\n", name_b, name_a);
+        else if ((set_clear(seen_units), r = unit_compare_to(bus, seen_units, name_b, name_a)) > 0)
+                printf("%s is after %s\n", name_a, name_b);
+        else if (r >= 0)
+                printf("%s is independent from %s\n", name_a, name_b);
+        else
+                return r;
+
+        return 0;
+}
 static int graph_one_property(sd_bus *bus, const UnitInfo *u, const char* prop, const char *color, char* patterns[], char* from_patterns[], char* to_patterns[]) {
         _cleanup_strv_free_ char **units = NULL;
         char **unit;
@@ -1891,6 +2008,7 @@ int main(int argc, char *argv[]) {
                 { "verify",            2,        VERB_ANY, 0,            do_verify              },
                 { "calendar",          2,        VERB_ANY, 0,            test_calendar          },
                 { "service-watchdogs", VERB_ANY, 2,        0,            service_watchdogs      },
+                { "unit-compare",      3,        3,        0,            analyze_unit_compare   },
                 {}
         };
 
