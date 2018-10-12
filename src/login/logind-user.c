@@ -34,13 +34,21 @@
 #include "user-util.h"
 #include "util.h"
 
+static int user_parent_slice(Manager *m, uid_t uid, gid_t gid, const char *name, char **ret) {
+        char lu[DECIMAL_STR_MAX(uid_t) + 1];
+
+        assert(ret);
+
+        xsprintf(lu, UID_FMT, uid);
+        return slice_build_subslice(SPECIAL_USER_SLICE, lu, ret);
+}
+
 int user_new(User **ret,
              Manager *m,
              uid_t uid,
              gid_t gid,
              const char *name,
              const char *home) {
-
         _cleanup_(user_freep) User *u = NULL;
         char lu[DECIMAL_STR_MAX(uid_t) + 1];
         int r;
@@ -76,8 +84,7 @@ int user_new(User **ret,
         if (asprintf(&u->runtime_path, "/run/user/"UID_FMT, uid) < 0)
                 return -ENOMEM;
 
-        xsprintf(lu, UID_FMT, uid);
-        r = slice_build_subslice(SPECIAL_USER_SLICE, lu, &u->slice);
+        r = user_parent_slice(m, uid, gid, name, &u->slice);
         if (r < 0)
                 return r;
 
@@ -356,7 +363,12 @@ static void user_start_service(User *u) {
 
         u->service_job = mfree(u->service_job);
 
-        r = manager_start_unit(u->manager, u->service, &error, &u->service_job);
+        /* TODO: make sure user service runs in u->slice */
+        r = manager_start_unit(
+                        u->manager,
+                        u->service,
+                        &error,
+                        &u->service_job);
         if (r < 0)
                 log_full_errno(sd_bus_error_has_name(&error, BUS_ERROR_UNIT_MASKED) ? LOG_DEBUG : LOG_WARNING, r,
                                "Failed to start user service '%s', ignoring: %s", u->service, bus_error_message(&error, r));
