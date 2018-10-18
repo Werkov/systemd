@@ -57,6 +57,7 @@ void manager_reset_config(Manager *m) {
         m->user_tasks_max = system_tasks_max_scale(DEFAULT_USER_TASKS_MAX_PERCENTAGE, 100U); /* 33% */
         m->sessions_max = 8192;
         m->inhibitors_max = 8192;
+        m->user_slice_parent= USER_SLICE_COMMON;
 
         m->kill_user_processes = KILL_USER_PROCESSES;
 

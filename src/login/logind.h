@@ -19,6 +19,7 @@ typedef struct Manager Manager;
 #include "logind-button.h"
 #include "logind-device.h"
 #include "logind-inhibit.h"
+#include "logind-user.h"
 
 struct Manager {
         sd_event *event;
@@ -121,6 +122,8 @@ struct Manager {
         uint64_t user_tasks_max;
         uint64_t sessions_max;
         uint64_t inhibitors_max;
+
+        UserSliceParent user_slice_parent;
 };
 
 void manager_reset_config(Manager *m);
