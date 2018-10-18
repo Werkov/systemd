@@ -4,6 +4,13 @@
 typedef struct User User;
 
 #include "conf-parser.h"
+
+typedef enum UserSliceParent {
+        USER_SLICE_DEFAULT,
+        _USER_SLICE_MAX,
+        _USER_SLICE_INVALID = -1
+} UserSliceParent;
+
 #include "list.h"
 #include "logind.h"
 
@@ -83,4 +90,8 @@ UserState user_state_from_string(const char *s) _pure_;
 int bus_user_method_terminate(sd_bus_message *message, void *userdata, sd_bus_error *error);
 int bus_user_method_kill(sd_bus_message *message, void *userdata, sd_bus_error *error);
 
+const char* user_slice_parent_to_string(UserSliceParent t) _const_;
+UserSliceParent user_slice_parent_from_string(const char *s) _pure_;
+
 CONFIG_PARSER_PROTOTYPE(config_parse_compat_user_tasks_max);
+CONFIG_PARSER_PROTOTYPE(config_parse_user_slice_parent);
