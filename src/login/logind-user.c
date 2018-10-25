@@ -36,11 +36,28 @@
 
 static int user_parent_slice(Manager *m, uid_t uid, gid_t gid, const char *name, char **ret) {
         char lu[DECIMAL_STR_MAX(uid_t) + 1];
+        char lg[DECIMAL_STR_MAX(gid_t) + 1];
+        _cleanup_free_ char *gid_slice = NULL;
+        int r;
 
         assert(ret);
 
         xsprintf(lu, UID_FMT, uid);
-        return slice_build_subslice(SPECIAL_USER_SLICE, lu, ret);
+        switch(m->user_slice_parent) {
+                case USER_SLICE_DEFAULT:
+                        return slice_build_subslice(SPECIAL_USER_SLICE, lu, ret);
+
+                case USER_SLICE_GID:
+                        xsprintf(lg, GID_FMT, gid);
+                        r = slice_build_subslice(SPECIAL_GID_SLICE, lg, &gid_slice);
+                        if (r < 0)
+                                return r;
+
+                        return slice_build_subslice(gid_slice, lu, ret);
+
+                default:
+                        assert_not_reached("Unhandled ENUM value");
+        }
 }
 
 int user_new(User **ret,
@@ -874,7 +891,9 @@ int config_parse_compat_user_tasks_max(
 
 static const char* const user_slice_parent_table[_USER_SLICE_MAX] = {
         [USER_SLICE_DEFAULT] = "default",
+        [USER_SLICE_GID]     = "gid",
 };
 
 DEFINE_STRING_TABLE_LOOKUP(user_slice_parent, UserSliceParent);
+// TODO check and warn when some user slices remain under old slice
 DEFINE_CONFIG_PARSE_ENUM(config_parse_user_slice_parent, user_slice_parent, UserSliceParent, "Failed to parse user slice parent");
