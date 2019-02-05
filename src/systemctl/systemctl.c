@@ -168,6 +168,7 @@ static OutputMode arg_output = OUTPUT_SHORT;
 static bool arg_plain = false;
 static bool arg_firmware_setup = false;
 static bool arg_now = false;
+static bool arg_single_transaction = false;
 static bool arg_jobs_before = false;
 static bool arg_jobs_after = false;
 
@@ -3053,6 +3054,10 @@ static int expand_names(sd_bus *bus, char **names, const char* suffix, char ***r
         return 0;
 }
 
+static int create_single_target(sd_bus *bus, char **names, char **target_name) {
+        return -ENOTSUP;
+}
+
 static const struct {
         const char *target;
         const char *verb;
@@ -3090,6 +3095,7 @@ static int start_unit(int argc, char *argv[], void *userdata) {
         _cleanup_(bus_wait_for_jobs_freep) BusWaitForJobs *w = NULL;
         _cleanup_(wait_context_free) WaitContext wait_context = {};
         const char *method, *mode, *one_name, *suffix = NULL;
+        _cleanup_free_ char *single_name = NULL;
         _cleanup_free_ char **stopped_units = NULL; /* Do not use _cleanup_strv_free_ */
         _cleanup_strv_free_ char **names = NULL;
         int r, ret = EXIT_SUCCESS;
@@ -3098,6 +3104,11 @@ static int start_unit(int argc, char *argv[], void *userdata) {
 
         if (arg_wait && !STR_IN_SET(argv[0], "start", "restart")) {
                 log_error("--wait may only be used with the 'start' or 'restart' commands.");
+                return -EINVAL;
+        }
+
+        if (arg_single_transaction && STR_IN_SET(argv[0], "start", "stop")) {
+                log_error("--single-transaction may only be used with the 'start' or 'stop' commands.");
                 return -EINVAL;
         }
 
@@ -3149,6 +3160,16 @@ static int start_unit(int argc, char *argv[], void *userdata) {
                 r = expand_names(bus, strv_skip(argv, 1), suffix, &names);
                 if (r < 0)
                         return log_error_errno(r, "Failed to expand names: %m");
+        }
+
+        if (arg_single_transaction) {
+                r = create_single_target(bus, names, &single_name);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to create single transaction target: %m");
+                strv_free(names);
+                names = strv_new(one_name);
+                if (!names)
+                        return log_oom();
         }
 
         if (!arg_no_block) {
@@ -7521,6 +7542,7 @@ static int systemctl_parse_argv(int argc, char *argv[]) {
                 ARG_NOW,
                 ARG_MESSAGE,
                 ARG_WAIT,
+                ARG_SINGLE_TRANSACTION,
         };
 
         static const struct option options[] = {
@@ -7569,6 +7591,7 @@ static int systemctl_parse_argv(int argc, char *argv[]) {
                 { "firmware-setup",      no_argument,       NULL, ARG_FIRMWARE_SETUP      },
                 { "now",                 no_argument,       NULL, ARG_NOW                 },
                 { "message",             required_argument, NULL, ARG_MESSAGE             },
+                { "single-transaction",  no_argument,       NULL, ARG_SINGLE_TRANSACTION  },
                 {}
         };
 
@@ -7895,6 +7918,10 @@ static int systemctl_parse_argv(int argc, char *argv[]) {
                 case ARG_MESSAGE:
                         if (strv_extend(&arg_wall, optarg) < 0)
                                 return log_oom();
+                        break;
+
+                case ARG_SINGLE_TRANSACTION:
+                        arg_single_transaction = true;
                         break;
 
                 case '.':
