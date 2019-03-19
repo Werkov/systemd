@@ -3314,8 +3314,7 @@ static void service_sigchld_event(Unit *u, pid_t pid, int code, int status) {
                                 if (main_pid_good(s) <= 0)
                                         service_enter_stop_post(s, f);
 
-                                /* If there is still a service
-                                 * process around, wait until
+                                /* If there is still a service process around, wait until
                                  * that one quit, too */
                                 break;
 
@@ -3341,7 +3340,15 @@ static void service_sigchld_event(Unit *u, pid_t pid, int code, int status) {
          * reassigned to us, which hopefully allows us to identify
          * when all children are gone */
         unit_tidy_watch_pids(u, s->main_pid, s->control_pid);
-        unit_watch_all_pids(u);
+
+        /* We watch the main/control process otherwise we can't retrieve the unit they
+         * belong to with cgroupv1. But if they are not our direct child, we won't get a
+         * SIGCHLD for them. Therefore we need to look for others to watch so we can
+         * detect when the cgroup becomes empty. Note that the control process is always
+         * our child so it's pointless to watch all other processes. */
+        if (!control_pid_good(s))
+                if (!s->main_pid_known || s->main_pid_alien)
+                        unit_watch_all_pids(u);
 
         /* If the PID set is empty now, then let's finish this off */
         if (set_isempty(u->pids))
