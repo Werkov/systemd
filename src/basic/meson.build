@@ -84,6 +84,7 @@ basic_sources = files('''
         label.h
         limits-util.c
         limits-util.h
+        linux/if_ether.h
         list.h
         locale-util.c
         locale-util.h
