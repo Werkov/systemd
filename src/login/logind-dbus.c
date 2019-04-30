@@ -3714,6 +3714,57 @@ int manager_stop_unit(Manager *manager, const char *unit, sd_bus_error *error, c
         return strdup_job(reply, job);
 }
 
+int manager_ref_unit(Manager *manager, const char *unit, sd_bus_error *error) {
+        int r;
+
+        assert(manager);
+        assert(unit);
+
+        r = sd_bus_call_method(
+                        manager->bus,
+                        "org.freedesktop.systemd1",
+                        "/org/freedesktop/systemd1",
+                        "org.freedesktop.systemd1.Manager",
+                        "Ref",
+                        error,
+                        NULL,
+                        "s", unit);
+        return r;
+}
+
+int manager_unref_unit(Manager *manager, const char *unit, sd_bus_error *error) {
+        int r;
+
+        assert(manager);
+        assert(unit);
+
+        r = sd_bus_call_method(
+                        manager->bus,
+                        "org.freedesktop.systemd1",
+                        "/org/freedesktop/systemd1",
+                        "org.freedesktop.systemd1.Manager",
+                        "Unref",
+                        error,
+                        NULL,
+                        "s", unit);
+        return r;
+}
+
+int manager_unit_set_slice(Manager *manager, const char *unit, const char *slice, sd_bus_error *error) {
+        int r;
+
+        r = sd_bus_call_method(
+                        manager->bus,
+                        "org.freedesktop.systemd1",
+                        "/org/freedesktop/systemd1",
+                        "org.freedesktop.systemd1.Manager",
+                        "SetUnitProperties",
+                        error,
+                        NULL,
+                        "sba(sv)", unit, true, "Slice", slice);
+        return r;
+}
+
 int manager_abandon_scope(Manager *manager, const char *scope, sd_bus_error *ret_error) {
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         _cleanup_free_ char *path = NULL;

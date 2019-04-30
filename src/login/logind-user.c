@@ -380,7 +380,12 @@ static void user_start_service(User *u) {
 
         u->service_job = mfree(u->service_job);
 
-        /* TODO: make sure user service runs in u->slice */
+        r = manager_ref_unit(u->manager, u->service, &error);
+        // TODO error handling
+
+        r = manager_unit_set_slice(u->manager, u->service, u->slice, &error);
+        // TODO error handling
+
         r = manager_start_unit(
                         u->manager,
                         u->service,
@@ -389,6 +394,9 @@ static void user_start_service(User *u) {
         if (r < 0)
                 log_full_errno(sd_bus_error_has_name(&error, BUS_ERROR_UNIT_MASKED) ? LOG_DEBUG : LOG_WARNING, r,
                                "Failed to start user service '%s', ignoring: %s", u->service, bus_error_message(&error, r));
+
+        r = manager_unref_unit(u->manager, u->service, &error);
+        // TODO error handling
 }
 
 int user_start(User *u) {
