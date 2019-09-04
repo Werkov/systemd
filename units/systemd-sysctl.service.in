@@ -20,4 +20,6 @@ ConditionPathIsReadWrite=/proc/sys/net/
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=@rootlibexecdir@/systemd-sysctl
+# systemd configuration defaults may depend on sysctl values
+ExecStartPost=-@rootbindir@/systemctl daemon-reload
 TimeoutSec=90s
