@@ -674,7 +674,8 @@
         starting the former will stop the latter and vice versa. Note
         that this setting is independent of and orthogonal to the
         <varname>After=</varname> and <varname>Before=</varname>
-        ordering dependencies.</para>
+        ordering dependencies. See the description of <varname>Before=</varname> and
+        <varname>After=</varname> for details of ordering effects on stop and start jobs.</para>
 
         <para>If a unit A that conflicts with a unit B is scheduled to
         be started at the same time as B, the transaction will either
