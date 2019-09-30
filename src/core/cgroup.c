@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <fnmatch.h>
+#include <poll.h>
 
 #include "sd-messages.h"
 
@@ -17,6 +18,7 @@
 #include "fd-util.h"
 #include "fileio.h"
 #include "fs-util.h"
+#include "io-util.h"
 #include "nulstr-util.h"
 #include "parse-util.h"
 #include "path-util.h"
@@ -3018,6 +3020,10 @@ static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents,
 
                                 if (event == CGROUP_EMPTY)
                                         unit_add_to_cgroup_empty_queue(u);
+                                else if (event == CGROUP_FROZEN)
+                                        unit_frozen(u);
+                                else if (event == CGROUP_THAWED)
+                                        unit_thawed(u);
                         }
 
                         u = hashmap_get(m->cgroup_memory_inotify_wd_unit, INT_TO_PTR(e->wd));
@@ -3800,6 +3806,38 @@ int compare_job_priority(const void *a, const void *b) {
         return strcmp(x->unit->id, y->unit->id);
 }
 
+int unit_cgroup_freezer_action(Unit *u, FreezerAction action) {
+        int r;
+        _cleanup_free_ char *path = NULL;
+        const char *action_str;
+
+        assert(u);
+        assert(IN_SET(action, FREEZER_FREEZE, FREEZER_THAW));
+
+        if (!u->cgroup_realized)
+                return -EOPNOTSUPP;
+
+        r = cg_get_path(SYSTEMD_CGROUP_CONTROLLER, u->cgroup_path, "cgroup.freeze", &path);
+        if (r < 0)
+                return r;
+
+        log_unit_debug(u, "Performing %s action on %s", freezer_action_to_string(action), u->id);
+
+        if (action == FREEZER_FREEZE) {
+                u->freezer_state = FREEZER_FREEZING;
+                action_str = "1";
+        } else {
+                u->freezer_state = FREEZER_THAWING;
+                action_str = "0";
+        }
+
+        r = write_string_file(path, action_str, WRITE_STRING_FILE_DISABLE_BUFFER);
+        if (r < 0)
+                return r;
+
+        return 0;
+}
+
 static const char* const cgroup_device_policy_table[_CGROUP_DEVICE_POLICY_MAX] = {
         [CGROUP_AUTO] = "auto",
         [CGROUP_CLOSED] = "closed",
@@ -3835,3 +3873,10 @@ int unit_get_cpuset(Unit *u, CPUSet *cpus, const char *name) {
 }
 
 DEFINE_STRING_TABLE_LOOKUP(cgroup_device_policy, CGroupDevicePolicy);
+
+static const char* const freezer_action_table[_FREEZER_ACTION_MAX] = {
+        [FREEZER_THAW] = "thaw",
+        [FREEZER_FREEZE] = "freeze",
+};
+
+DEFINE_STRING_TABLE_LOOKUP(freezer_action, FreezerAction);

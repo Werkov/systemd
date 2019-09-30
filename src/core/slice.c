@@ -5,6 +5,7 @@
 #include "alloc-util.h"
 #include "dbus-slice.h"
 #include "dbus-unit.h"
+#include "fd-util.h"
 #include "log.h"
 #include "serialize.h"
 #include "slice.h"
@@ -347,6 +348,55 @@ static void slice_enumerate_perpetual(Manager *m) {
                 (void) slice_make_perpetual(m, SPECIAL_SYSTEM_SLICE, NULL);
 }
 
+static int slice_freezer_action(Unit *s, FreezerAction action) {
+        int r;
+        _cleanup_closedir_ DIR *d = NULL;
+
+        assert(s);
+        assert_return(IN_SET(action, FREEZER_FREEZE, FREEZER_THAW), -EINVAL);
+
+        r = cg_enumerate_subgroups(SYSTEMD_CGROUP_CONTROLLER, s->cgroup_path, &d);
+        if (r < 0)
+                return log_unit_error_errno(s, r, "Failed to open cgroup directory: %m");
+
+        for (;;) {
+                _cleanup_free_ char *subgroup = NULL;
+                Unit *u;
+
+                r = cg_read_subgroup(d, &subgroup);
+                if (r < 0)
+                        return log_unit_error_errno(s, r, "Failed to read list of sub-cgroups: %m");
+                if (r == 0)
+                        break;
+
+                u = manager_get_unit(s->manager, subgroup);
+                assert(u);
+
+                if (action == FREEZER_FREEZE && UNIT_VTABLE(u)->freeze)
+                        UNIT_VTABLE(u)->freeze(u);
+                else if (action == FREEZER_THAW && UNIT_VTABLE(u)->thaw)
+                        UNIT_VTABLE(u)->thaw(u);
+        }
+
+        r = unit_cgroup_freezer_action(s, action);
+        if (r < 0)
+                return r;
+
+        return 0;
+}
+
+static int slice_freeze(Unit *s) {
+        assert(s);
+
+        return slice_freezer_action(s, FREEZER_FREEZE);
+}
+
+static int slice_thaw(Unit *s) {
+        assert(s);
+
+        return slice_freezer_action(s, FREEZER_THAW);
+}
+
 const UnitVTable slice_vtable = {
         .object_size = sizeof(Slice),
         .cgroup_context_offset = offsetof(Slice, cgroup_context),
@@ -370,6 +420,9 @@ const UnitVTable slice_vtable = {
         .stop = slice_stop,
 
         .kill = slice_kill,
+
+        .freeze = slice_freeze,
+        .thaw = slice_thaw,
 
         .serialize = slice_serialize,
         .deserialize_item = slice_deserialize_item,
