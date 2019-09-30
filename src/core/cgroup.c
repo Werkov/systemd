@@ -2928,6 +2928,55 @@ static void unit_add_to_cgroup_oom_queue(Unit *u) {
                 log_error_errno(r, "Failed to enable cgroup oom event source: %m");
 }
 
+static CGroupControlEvent cgroup_control_get_last_event(Unit *u) {
+        int r;
+        _cleanup_free_ char *events = NULL;
+        _cleanup_fclose_ FILE *f = NULL;
+
+        assert(u);
+
+        r = cg_get_path(SYSTEMD_CGROUP_CONTROLLER, u->cgroup_path, "cgroup.events", &events);
+        if (r < 0)
+                return -ENOMEM;
+
+        r = fopen_unlocked(events, "re", &f);
+        if (r < 0)
+                return r;
+
+        /* We don't store previous cgroup.events state. Hence the code below is relying on two assumptions.
+           First, order of lines in cgroup.events is stable. Second, we never receive populated notification,
+           i.e. all cgroups have processes in them at the time we start monitoring cgroup.events and they can
+           either become empty or change their freezer status. */
+        for (;;) {
+                int state;
+                _cleanup_free_ char *line = NULL;
+                char *l, *p;
+
+                r = read_line(f, LONG_LINE_MAX, &line);
+                if (r < 0)
+                        return r;
+                if (r == 0)
+                        break;
+
+                l = strstrip(line);
+
+                if ((p = startswith(l, "populated "))) {
+                        if (sscanf(p, "%d", &state) != 1)
+                                return -EIO;
+
+                        if (state == 0)
+                                return CGROUP_EMPTY;
+                } else if ((p = startswith(l, "frozen "))) {
+                        if (sscanf(p, "%d", &state) != 1)
+                                return -EIO;
+
+                        return state == 1 ? CGROUP_FROZEN : CGROUP_THAWED;
+                }
+        }
+
+        return _CGROUP_CONTROL_EVENT_INVALID;
+}
+
 static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
         Manager *m = userdata;
 
@@ -2950,6 +2999,7 @@ static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents,
 
                 FOREACH_INOTIFY_EVENT(e, buffer, l) {
                         Unit *u;
+                        CGroupControlEvent event;
 
                         if (e->wd < 0)
                                 /* Queue overflow has no watch descriptor */
@@ -2963,8 +3013,12 @@ static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents,
                          * because it was queued before the removal. Let's ignore this here safely. */
 
                         u = hashmap_get(m->cgroup_control_inotify_wd_unit, INT_TO_PTR(e->wd));
-                        if (u)
-                                unit_add_to_cgroup_empty_queue(u);
+                        if (u) {
+                                event = cgroup_control_get_last_event(u);
+
+                                if (event == CGROUP_EMPTY)
+                                        unit_add_to_cgroup_empty_queue(u);
+                        }
 
                         u = hashmap_get(m->cgroup_memory_inotify_wd_unit, INT_TO_PTR(e->wd));
                         if (u)
