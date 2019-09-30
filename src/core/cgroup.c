@@ -2828,6 +2828,16 @@ void unit_add_to_cgroup_empty_queue(Unit *u) {
                 log_debug_errno(r, "Failed to enable cgroup empty event source: %m");
 }
 
+static void unit_remove_from_cgroup_empty_queue(Unit *u) {
+        assert(u);
+
+        if (!u->in_cgroup_empty_queue)
+                return;
+
+        LIST_REMOVE(cgroup_empty_queue, u->manager->cgroup_empty_queue, u);
+        u->in_cgroup_empty_queue = false;
+}
+
 int unit_check_oom(Unit *u) {
         _cleanup_free_ char *oom_kill = NULL;
         bool increased;
@@ -2928,6 +2938,28 @@ static void unit_add_to_cgroup_oom_queue(Unit *u) {
                 log_error_errno(r, "Failed to enable cgroup oom event source: %m");
 }
 
+static int unit_check_cgroup_events(Unit *u) {
+        int r;
+        _cleanup_free_ char *value = NULL;
+
+        assert(u);
+
+        r = cg_get_keyed_attribute(SYSTEMD_CGROUP_CONTROLLER, u->cgroup_path, "cgroup.events", STRV_MAKE("populated", "frozen"), &value);
+        /* "frozen" key exists only in kernels >v5.2 so do not mind if it is missing. */
+        if (r != ENXIO && r < 0)
+                return r;
+
+        /* The cgroup.events notifications can be merged together so act as we saw the given state for the
+         * first time. The functions we call to handle given state are idempotent, which makes them
+         * effectively remember the previous state. */
+        if (value == NULL || streq(value, "1"))
+                unit_remove_from_cgroup_empty_queue(u);
+        else
+                unit_add_to_cgroup_empty_queue(u);
+
+        return 0;
+}
+
 static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
         Manager *m = userdata;
 
@@ -2963,8 +2995,9 @@ static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents,
                          * because it was queued before the removal. Let's ignore this here safely. */
 
                         u = hashmap_get(m->cgroup_control_inotify_wd_unit, INT_TO_PTR(e->wd));
-                        if (u)
-                                unit_add_to_cgroup_empty_queue(u);
+                        if (u) {
+                                unit_check_cgroup_events(u);
+                        }
 
                         u = hashmap_get(m->cgroup_memory_inotify_wd_unit, INT_TO_PTR(e->wd));
                         if (u)
