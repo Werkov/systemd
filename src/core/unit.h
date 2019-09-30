@@ -113,6 +113,9 @@ typedef struct Unit {
         UnitLoadState load_state;
         Unit *merged_into;
 
+        FreezerState freezer_state;
+        sd_bus_message *pending_freezer_message;
+
         char *id; /* One name is special because we use it for identification. Points to an entry in the names set */
         char *instance;
 
@@ -479,6 +482,10 @@ typedef struct UnitVTable {
         /* Clear out the various runtime/state/cache/logs/configuration data */
         int (*clean)(Unit *u, ExecCleanMask m);
 
+        /* Freeze the unit */
+        int (*freeze)(Unit *u);
+        int (*thaw)(Unit *u);
+
         /* Return which kind of data can be cleaned */
         int (*can_clean)(Unit *u, ExecCleanMask *ret);
 
@@ -682,6 +689,7 @@ const char *unit_status_string(Unit *u) _pure_;
 bool unit_has_name(const Unit *u, const char *name);
 
 UnitActiveState unit_active_state(Unit *u);
+FreezerState unit_freezer_state(Unit *u);
 
 const char* unit_sub_state_to_string(Unit *u);
 
@@ -869,6 +877,15 @@ int unit_test_trigger_loaded(Unit *u);
 void unit_destroy_runtime_directory(Unit *u, const ExecContext *context);
 int unit_clean(Unit *u, ExecCleanMask mask);
 int unit_can_clean(Unit *u, ExecCleanMask *ret_mask);
+
+int unit_freeze(Unit *u);
+void unit_frozen(Unit *u);
+
+int unit_thaw(Unit *u);
+void unit_thawed(Unit *u);
+
+int unit_freeze_vtable_common(Unit *u);
+int unit_thaw_vtable_common(Unit *u);
 
 /* Macros which append UNIT= or USER_UNIT= to the message */
 

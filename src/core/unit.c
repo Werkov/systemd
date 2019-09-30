@@ -722,6 +722,12 @@ void unit_free(Unit *u) {
         free(u);
 }
 
+FreezerState unit_freezer_state(Unit *u) {
+        assert(u);
+
+        return u->freezer_state;
+}
+
 UnitActiveState unit_active_state(Unit *u) {
         assert(u);
 
@@ -1792,6 +1798,7 @@ int unit_start(Unit *u) {
          * waits for a holdoff timer to elapse before it will start again. */
 
         unit_add_to_dbus_queue(u);
+        unit_cgroup_freezer_action(u, FREEZER_THAW);
 
         return UNIT_VTABLE(u)->start(u);
 }
@@ -1844,6 +1851,7 @@ int unit_stop(Unit *u) {
                 return -EBADR;
 
         unit_add_to_dbus_queue(u);
+        unit_cgroup_freezer_action(u, FREEZER_THAW);
 
         return UNIT_VTABLE(u)->stop(u);
 }
@@ -1899,6 +1907,8 @@ int unit_reload(Unit *u) {
                 unit_notify(u, unit_active_state(u), unit_active_state(u), 0);
                 return 0;
         }
+
+        unit_cgroup_freezer_action(u, FREEZER_THAW);
 
         return UNIT_VTABLE(u)->reload(u);
 }
@@ -3428,6 +3438,8 @@ int unit_serialize(Unit *u, FILE *f, FDSet *fds, bool serialize_jobs) {
         if (!sd_id128_is_null(u->invocation_id))
                 (void) serialize_item_format(f, "invocation-id", SD_ID128_FORMAT_STR, SD_ID128_FORMAT_VAL(u->invocation_id));
 
+        (void) serialize_item_format(f, "freezer-state", "%s", freezer_state_to_string(unit_freezer_state(u)));
+
         bus_track_serialize(u->bus_track, f, "ref");
 
         for (m = 0; m < _CGROUP_IP_ACCOUNTING_METRIC_MAX; m++) {
@@ -3735,6 +3747,16 @@ int unit_deserialize(Unit *u, FILE *f, FDSet *fds) {
                                 if (r < 0)
                                         log_unit_warning_errno(u, r, "Failed to set invocation ID for unit: %m");
                         }
+
+                        continue;
+                } else if (streq(l, "freezer-state")) {
+                        FreezerState s;
+
+                        s = freezer_state_from_string(v);
+                        if (s < 0)
+                                log_unit_debug(u, "Failed to deserialize freezer-state '%s', ignoring.", v);
+                        else
+                                u->freezer_state = s;
 
                         continue;
                 }
@@ -5941,6 +5963,101 @@ int unit_can_clean(Unit *u, ExecCleanMask *ret) {
         assert(UNIT_VTABLE(u)->can_clean);
 
         return UNIT_VTABLE(u)->can_clean(u, ret);
+}
+
+void unit_frozen(Unit *u) {
+        assert(u);
+
+        if (u->freezer_state == FREEZER_FROZEN)
+                return;
+
+        u->freezer_state = FREEZER_FROZEN;
+        bus_unit_send_pending_freezer_message(u);
+}
+
+void unit_thawed(Unit *u) {
+        assert(u);
+
+        if (u->freezer_state == FREEZER_RUNNING)
+                return;
+
+        u->freezer_state = FREEZER_RUNNING;
+        bus_unit_send_pending_freezer_message(u);
+}
+
+static int unit_freezer_action(Unit *u, FreezerAction action) {
+        UnitActiveState state;
+        FreezerState target_state, transition_state;
+        int (*method)(Unit*);
+
+        assert(u);
+        assert_return(IN_SET(action, FREEZER_FREEZE, FREEZER_THAW), -EINVAL);
+
+        if (action == FREEZER_FREEZE) {
+                target_state = FREEZER_FROZEN;
+                transition_state = FREEZER_FREEZING;
+                method = UNIT_VTABLE(u)->freeze;
+        } else {
+                target_state = FREEZER_RUNNING;
+                transition_state = FREEZER_THAWING;
+                method = UNIT_VTABLE(u)->thaw;
+        }
+
+        if (!UNIT_VTABLE(u)->freeze ||
+            cg_all_unified() <= 0)
+                return -EOPNOTSUPP;
+
+        if (u->load_state != UNIT_LOADED)
+                return -EBUSY;
+
+        if (u->job)
+                return -EBUSY;
+
+        state = unit_active_state(u);
+        if (!IN_SET(state, UNIT_ACTIVE))
+                return -EBUSY;
+
+        if (IN_SET(u->freezer_state, FREEZER_FREEZING, FREEZER_THAWING))
+                return -EALREADY;
+
+        if (u->freezer_state == target_state)
+                return 0;
+
+        u->freezer_state = transition_state;
+
+        return method(u);
+}
+
+int unit_thaw(Unit *u) {
+        return unit_freezer_action(u, FREEZER_THAW);
+}
+
+int unit_freeze(Unit *u) {
+        return unit_freezer_action(u, FREEZER_FREEZE);
+}
+
+int unit_freeze_vtable_common(Unit *u) {
+        int r;
+
+        assert(u);
+
+        r = unit_cgroup_freezer_action(u, FREEZER_FREEZE);
+        if (r < 0)
+                return r;
+
+        return 0;
+}
+
+int unit_thaw_vtable_common(Unit *u) {
+        int r;
+
+        assert(u);
+
+        r = unit_cgroup_freezer_action(u, FREEZER_THAW);
+        if (r < 0)
+                return r;
+
+        return 0;
 }
 
 static const char* const collect_mode_table[_COLLECT_MODE_MAX] = {

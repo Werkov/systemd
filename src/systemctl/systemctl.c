@@ -3923,6 +3923,58 @@ static int clean_unit(int argc, char *argv[], void *userdata) {
         return ret;
 }
 
+static int freezer_action(int argc, char *argv[], void *userdata) {
+        _cleanup_strv_free_ char **names = NULL;
+        int r, ret = EXIT_SUCCESS;
+        char **name;
+        const char *method;
+        sd_bus *bus;
+
+        if (streq(argv[0], "freeze"))
+                method = "Freeze";
+        else
+                method = "Thaw";
+
+        r = acquire_bus(BUS_FULL, &bus);
+        if (r < 0)
+                return r;
+
+        polkit_agent_open_maybe();
+
+        r = expand_names(bus, strv_skip(argv, 1), NULL, &names, NULL);
+        if (r < 0)
+                return log_error_errno(r, "Failed to expand names: %m");
+
+        STRV_FOREACH(name, names) {
+                _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+                _cleanup_(sd_bus_message_unrefp) sd_bus_message *m = NULL;
+                _cleanup_free_ char *path = NULL;
+
+                path = unit_dbus_path_from_name(*name);
+                if (!path)
+                        return log_oom();
+
+                r = sd_bus_message_new_method_call(
+                                bus,
+                                &m,
+                                "org.freedesktop.systemd1",
+                                path,
+                                "org.freedesktop.systemd1.Unit",
+                                method);
+                if (r < 0)
+                        return bus_log_create_error(r);
+
+                r = sd_bus_call(bus, m, 0, &error, NULL);
+                if (r < 0) {
+                        log_error_errno(r, "Failed to freeze unit %s: %s", *name, bus_error_message(&error, r));
+                        if (ret == EXIT_SUCCESS)
+                                ret = r;
+                }
+        }
+
+        return ret;
+}
+
 typedef struct ExecStatusInfo {
         char *name;
 
@@ -4040,6 +4092,7 @@ typedef struct UnitStatusInfo {
         const char *id;
         const char *load_state;
         const char *active_state;
+        const char *freezer_state;
         const char *sub_state;
         const char *unit_file_state;
         const char *unit_file_preset;
@@ -4258,9 +4311,14 @@ static void print_status_info(
         }
 
         ss = streq_ptr(i->active_state, i->sub_state) ? NULL : i->sub_state;
-        if (ss)
-                printf("   Active: %s%s (%s)%s",
-                       active_on, strna(i->active_state), ss, active_off);
+        if (ss) {
+                if (!streq(i->freezer_state, "running"))
+                        printf("   Active: %s%s (%s)%s",
+                               active_on, strna(i->active_state), i->freezer_state, active_off);
+                else
+                        printf("   Active: %s%s (%s)%s",
+                               active_on, strna(i->active_state), ss, active_off);
+        }
         else
                 printf("   Active: %s%s%s",
                        active_on, strna(i->active_state), active_off);
@@ -5497,12 +5555,14 @@ static int show_one(
         static const struct bus_properties_map property_map[] = {
                 { "LoadState",                      "s",               NULL,           offsetof(UnitStatusInfo, load_state)                        },
                 { "ActiveState",                    "s",               NULL,           offsetof(UnitStatusInfo, active_state)                      },
+                { "FreezerState",                   "s",               NULL,           offsetof(UnitStatusInfo, freezer_state)                     },
                 { "Documentation",                  "as",              NULL,           offsetof(UnitStatusInfo, documentation)                     },
                 {}
         }, status_map[] = {
                 { "Id",                             "s",               NULL,           offsetof(UnitStatusInfo, id)                                },
                 { "LoadState",                      "s",               NULL,           offsetof(UnitStatusInfo, load_state)                        },
                 { "ActiveState",                    "s",               NULL,           offsetof(UnitStatusInfo, active_state)                      },
+                { "FreezerState",                   "s",               NULL,           offsetof(UnitStatusInfo, freezer_state)                     },
                 { "SubState",                       "s",               NULL,           offsetof(UnitStatusInfo, sub_state)                         },
                 { "UnitFileState",                  "s",               NULL,           offsetof(UnitStatusInfo, unit_file_state)                   },
                 { "UnitFilePreset",                 "s",               NULL,           offsetof(UnitStatusInfo, unit_file_preset)                  },
@@ -7687,6 +7747,8 @@ static int systemctl_help(void) {
                "  kill UNIT...                        Send signal to processes of a unit\n"
                "  clean UNIT...                       Clean runtime, cache, state, logs or\n"
                "                                      or configuration of unit\n"
+               "  freeze UNIT...                      Freeze a unit using cgroup freezer\n"
+               "  thaw UNIT...                        Resume execution of a frozen unit\n"
                "  is-active PATTERN...                Check whether units are active\n"
                "  is-failed PATTERN...                Check whether units are failed\n"
                "  status [PATTERN...|PID...]          Show runtime status of one or more units\n"
@@ -8940,6 +9002,8 @@ static int systemctl_main(int argc, char *argv[]) {
                 { "isolate",               2,        2,        VERB_ONLINE_ONLY, start_unit           },
                 { "kill",                  2,        VERB_ANY, VERB_ONLINE_ONLY, kill_unit            },
                 { "clean",                 2,        VERB_ANY, VERB_ONLINE_ONLY, clean_unit           },
+                { "freeze",                2,        VERB_ANY, VERB_ONLINE_ONLY, freezer_action       },
+                { "thaw",                  2,        VERB_ANY, VERB_ONLINE_ONLY, freezer_action       },
                 { "is-active",             2,        VERB_ANY, VERB_ONLINE_ONLY, check_unit_active    },
                 { "check",                 2,        VERB_ANY, VERB_ONLINE_ONLY, check_unit_active    }, /* deprecated alias of is-active */
                 { "is-failed",             2,        VERB_ANY, VERB_ONLINE_ONLY, check_unit_failed    },
