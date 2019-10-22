@@ -33,15 +33,6 @@ typedef enum CGroupDevicePolicy {
         _CGROUP_DEVICE_POLICY_INVALID = -1
 } CGroupDevicePolicy;
 
-typedef enum CGroupControlEvent {
-        CGROUP_EMPTY,
-        CGROUP_FROZEN,
-        CGROUP_THAWED,
-
-        _CGROUP_CONTROL_EVENT_MAX,
-        _CGROUP_CONTROL_EVENT_INVALID = -1
-} CGroupControlEvent;
-
 typedef enum FreezerAction {
         FREEZER_THAW,
         FREEZER_FREEZE,

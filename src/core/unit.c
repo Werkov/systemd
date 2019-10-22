@@ -5968,16 +5968,20 @@ int unit_can_clean(Unit *u, ExecCleanMask *ret) {
 void unit_frozen(Unit *u) {
         assert(u);
 
-        u->freezer_state = FREEZER_FROZEN;
+        if (u->freezer_state == FREEZER_FROZEN)
+                return;
 
+        u->freezer_state = FREEZER_FROZEN;
         bus_unit_send_pending_freezer_message(u);
 }
 
 void unit_thawed(Unit *u) {
         assert(u);
 
-        u->freezer_state = FREEZER_RUNNING;
+        if (u->freezer_state == FREEZER_RUNNING)
+                return;
 
+        u->freezer_state = FREEZER_RUNNING;
         bus_unit_send_pending_freezer_message(u);
 }
 

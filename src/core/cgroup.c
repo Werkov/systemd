@@ -2830,6 +2830,16 @@ void unit_add_to_cgroup_empty_queue(Unit *u) {
                 log_debug_errno(r, "Failed to enable cgroup empty event source: %m");
 }
 
+static void unit_remove_from_cgroup_empty_queue(Unit *u) {
+        assert(u);
+
+        if (!u->in_cgroup_empty_queue)
+                return;
+
+        LIST_REMOVE(cgroup_empty_queue, u->manager->cgroup_empty_queue, u);
+        u->in_cgroup_empty_queue = false;
+}
+
 int unit_check_oom(Unit *u) {
         _cleanup_free_ char *oom_kill = NULL;
         bool increased;
@@ -2930,53 +2940,34 @@ static void unit_add_to_cgroup_oom_queue(Unit *u) {
                 log_error_errno(r, "Failed to enable cgroup oom event source: %m");
 }
 
-static CGroupControlEvent cgroup_control_get_last_event(Unit *u) {
-        int r;
-        _cleanup_free_ char *events = NULL;
-        _cleanup_fclose_ FILE *f = NULL;
+static int unit_check_cgroup_events(Unit *u) {
+        int r, i;
+        char *values[2] = {};
 
         assert(u);
 
-        r = cg_get_path(SYSTEMD_CGROUP_CONTROLLER, u->cgroup_path, "cgroup.events", &events);
-        if (r < 0)
-                return -ENOMEM;
-
-        r = fopen_unlocked(events, "re", &f);
-        if (r < 0)
+        r = cg_get_keyed_attribute(SYSTEMD_CGROUP_CONTROLLER, u->cgroup_path, "cgroup.events", STRV_MAKE("populated", "frozen"), values);
+        /* "frozen" key exists only in kernels >v5.2 so assume thawed cgroup before that. */
+        if (r != ENXIO && r < 0)
                 return r;
 
-        /* We don't store previous cgroup.events state. Hence the code below is relying on two assumptions.
-           First, order of lines in cgroup.events is stable. Second, we never receive populated notification,
-           i.e. all cgroups have processes in them at the time we start monitoring cgroup.events and they can
-           either become empty or change their freezer status. */
-        for (;;) {
-                int state;
-                _cleanup_free_ char *line = NULL;
-                char *l, *p;
+        /* The cgroup.events notifications can be merged together so act as we saw the given state for the
+         * first time. The functions we call to handle given state are idempotent, which makes them
+         * effectively remember the previous state. */
+        if (values[0] == NULL || streq(values[0], "1"))
+                unit_remove_from_cgroup_empty_queue(u);
+        else
+                unit_add_to_cgroup_empty_queue(u);
 
-                r = read_line(f, LONG_LINE_MAX, &line);
-                if (r < 0)
-                        return r;
-                if (r == 0)
-                        break;
+        if (values[1] == NULL || streq(values[1], "0"))
+                unit_thawed(u);
+        else
+                unit_frozen(u);
 
-                l = strstrip(line);
+        for (i = 0; i < 2; i++)
+                free(values[i]);
 
-                if ((p = startswith(l, "populated "))) {
-                        if (sscanf(p, "%d", &state) != 1)
-                                return -EIO;
-
-                        if (state == 0)
-                                return CGROUP_EMPTY;
-                } else if ((p = startswith(l, "frozen "))) {
-                        if (sscanf(p, "%d", &state) != 1)
-                                return -EIO;
-
-                        return state == 1 ? CGROUP_FROZEN : CGROUP_THAWED;
-                }
-        }
-
-        return _CGROUP_CONTROL_EVENT_INVALID;
+        return 0;
 }
 
 static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
@@ -3001,7 +2992,6 @@ static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents,
 
                 FOREACH_INOTIFY_EVENT(e, buffer, l) {
                         Unit *u;
-                        CGroupControlEvent event;
 
                         if (e->wd < 0)
                                 /* Queue overflow has no watch descriptor */
@@ -3016,14 +3006,7 @@ static int on_cgroup_inotify_event(sd_event_source *s, int fd, uint32_t revents,
 
                         u = hashmap_get(m->cgroup_control_inotify_wd_unit, INT_TO_PTR(e->wd));
                         if (u) {
-                                event = cgroup_control_get_last_event(u);
-
-                                if (event == CGROUP_EMPTY)
-                                        unit_add_to_cgroup_empty_queue(u);
-                                else if (event == CGROUP_FROZEN)
-                                        unit_frozen(u);
-                                else if (event == CGROUP_THAWED)
-                                        unit_thawed(u);
+                                unit_check_cgroup_events(u);
                         }
 
                         u = hashmap_get(m->cgroup_memory_inotify_wd_unit, INT_TO_PTR(e->wd));
