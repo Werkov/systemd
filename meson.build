@@ -1536,7 +1536,7 @@ test_dlopen = executable(
         disable_mempool_c,
         include_directories : includes,
         link_with : [libbasic],
-        dependencies : [libdl],
+        dependencies : [libdl, threads],
         build_by_default : want_tests != 'false')
 
 foreach tuple : [['myhostname', 'ENABLE_NSS_MYHOSTNAME'],

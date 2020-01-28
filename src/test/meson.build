@@ -933,7 +933,7 @@ tests += [
         [['src/libsystemd/sd-bus/test-bus-error.c'],
          [libshared_static,
           libsystemd_static],
-         []],
+         [threads]],
 
         [['src/libsystemd/sd-bus/test-bus-track.c'],
          [],
