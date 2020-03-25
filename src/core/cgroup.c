@@ -2351,6 +2351,8 @@ static void unit_add_siblings_to_cgroup_realize_queue(Unit *u) {
                 void *v;
 
                 HASHMAP_FOREACH_KEY(v, m, slice->dependencies[UNIT_BEFORE], i) {
+                        if (m == u)
+                                continue;
 
                         /* Skip units that have a dependency on the slice but aren't actually in it. */
                         if (UNIT_DEREF(m->slice) != slice)
