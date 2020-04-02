@@ -1838,13 +1838,15 @@ int unit_pick_cgroup_path(Unit *u) {
         return 0;
 }
 
-static int unit_create_cgroup(
+static int unit_update_cgroup(
                 Unit *u,
                 CGroupMask target_mask,
                 CGroupMask enable_mask,
                 ManagerState state) {
 
         bool created;
+        bool is_root_slice;
+        CGroupMask migrate_mask;
         int r;
 
         assert(u);
@@ -1899,17 +1901,24 @@ static int unit_create_cgroup(
 
         /* Keep track that this is now realized */
         u->cgroup_realized = true;
+        migrate_mask = u->cgroup_realized_mask ^ target_mask;
         u->cgroup_realized_mask = target_mask;
 
-        if (u->type != UNIT_SLICE && !unit_cgroup_delegate(u)) {
+        /* Migrate processes in controller hierarchies first and if disabling happened, delete emptied
+         * cgroups afterwards.
+         * For slices: TODO what we rely on... TODO and upward/downward propagation
+         */
+        migrate_mask &= ~unit_get_delegate_mask(u);
 
-                /* Then, possibly move things over, but not if
-                 * subgroups may contain processes, which is the case
-                 * for slice and delegation units. */
-                r = cg_migrate_everywhere(u->manager->cgroup_supported, u->cgroup_path, u->cgroup_path, migrate_callback, u);
-                if (r < 0)
-                        log_unit_warning_errno(u, r, "Failed to migrate cgroup from to %s, ignoring: %m", u->cgroup_path);
-        }
+        r = cg_migrate_controllers(u->manager->cgroup_supported, migrate_mask, u->cgroup_path, migrate_callback, u);
+        if (r < 0)
+                log_unit_warning_errno(u, r, "Failed to migrate cgroup from to %s, ignoring: %m", u->cgroup_path);
+
+        /* Delete unnecessary controller groups */
+        is_root_slice = unit_has_name(u, SPECIAL_ROOT_SLICE);
+        r = cg_trim_controllers(u->manager->cgroup_supported, target_mask & ~unit_get_delegate_mask(u), u->cgroup_path, !is_root_slice);
+        if (r < 0)
+                log_unit_warning_errno(u, r, "Failed to delete cgroup %s, ignoring: %m", u->cgroup_path);
 
         /* Set attributes */
         cgroup_context_apply(u, target_mask, state);
@@ -2171,7 +2180,7 @@ static int unit_realize_cgroup_now_enable(Unit *u, ManagerState state) {
         new_target_mask = u->cgroup_realized_mask | target_mask;
         new_enable_mask = u->cgroup_enabled_mask | enable_mask;
 
-        return unit_create_cgroup(u, new_target_mask, new_enable_mask, state);
+        return unit_update_cgroup(u, new_target_mask, new_enable_mask, state);
 }
 
 /* Controllers can only be disabled depth-first, from the leaves of the
@@ -2215,7 +2224,7 @@ static int unit_realize_cgroup_now_disable(Unit *u, ManagerState state) {
                 new_target_mask = m->cgroup_realized_mask & target_mask;
                 new_enable_mask = m->cgroup_enabled_mask & enable_mask;
 
-                r = unit_create_cgroup(m, new_target_mask, new_enable_mask, state);
+                r = unit_update_cgroup(m, new_target_mask, new_enable_mask, state);
                 if (r < 0)
                         return r;
         }
@@ -2294,7 +2303,7 @@ static int unit_realize_cgroup_now(Unit *u, ManagerState state) {
         }
 
         /* Now actually deal with the cgroup we were trying to realise and set attributes */
-        r = unit_create_cgroup(u, target_mask, enable_mask, state);
+        r = unit_update_cgroup(u, target_mask, enable_mask, state);
         if (r < 0)
                 return r;
 
@@ -2400,6 +2409,7 @@ int unit_realize_cgroup(Unit *u) {
          * iteration. */
 
         /* Add all sibling slices to the cgroup queue. */
+        // TODO add parents (and their siblaings) bottom up for disabling
         unit_add_siblings_to_cgroup_realize_queue(u);
 
         /* And realize this one now (and apply the values) */
