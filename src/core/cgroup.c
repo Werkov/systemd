@@ -1647,7 +1647,10 @@ const char *unit_get_realized_cgroup_path(Unit *u, CGroupMask mask) {
 }
 
 static const char *migrate_callback(CGroupMask mask, void *userdata) {
-        return unit_get_realized_cgroup_path(userdata, mask);
+        /* If not realized at all, migrate to root .
+         * It may happen if we're upgrading from older version that didn't clean up.
+         */
+        return unit_get_realized_cgroup_path(userdata, mask) ?: "";
 }
 
 char *unit_default_cgroup_path(const Unit *u) {
