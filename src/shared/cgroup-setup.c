@@ -754,7 +754,7 @@ int cg_trim_controllers(CGroupMask supported, CGroupMask mask, const char *path,
                 if (FLAGS_SET(done, bit))
                         continue;
 
-                if (!FLAGS_SET(mask, bit))
+                if (FLAGS_SET(mask, bit))
                         (void) cg_trim(cgroup_controller_to_string(c), path, delete_root);
 
                 done |= CGROUP_MASK_EXTEND_JOINED(bit);

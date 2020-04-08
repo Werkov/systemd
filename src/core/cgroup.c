@@ -1900,9 +1900,9 @@ static int unit_update_cgroup(
         if (r < 0)
                 log_unit_warning_errno(u, r, "Failed to migrate cgroup from to %s, ignoring: %m", u->cgroup_path);
 
-        /* Delete unnecessary controller groups */
+        /* Delete unnecessary controller groups (delegated are subset of target_mask, so we don't tuch them)*/
         is_root_slice = unit_has_name(u, SPECIAL_ROOT_SLICE);
-        r = cg_trim_controllers(u->manager->cgroup_supported, target_mask & ~unit_get_delegate_mask(u), u->cgroup_path, !is_root_slice);
+        r = cg_trim_controllers(u->manager->cgroup_supported, ~target_mask, u->cgroup_path, !is_root_slice);
         if (r < 0)
                 log_unit_warning_errno(u, r, "Failed to delete cgroup %s, ignoring: %m", u->cgroup_path);
 
