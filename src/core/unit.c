@@ -589,13 +589,9 @@ void unit_free(Unit *u) {
         if (!u)
                 return;
 
-        if (UNIT_ISSET(u->slice)) {
-                /* A unit is being dropped from the tree, make sure our parent slice recalculates the member mask */
-                unit_invalidate_cgroup_members_masks(UNIT_DEREF(u->slice));
-
-                /* And make sure the parent is realized again, updating cgroup memberships */
-                unit_add_to_cgroup_realize_queue(UNIT_DEREF(u->slice));
-        }
+        /* A unit is being dropped from the tree, make sure our siblings and parent slice are realized properly */
+        if (UNIT_HAS_CGROUP_CONTEXT(u))
+                unit_add_siblings_to_cgroup_realize_queue(u);
 
         u->transient_file = safe_fclose(u->transient_file);
 
@@ -1589,9 +1585,6 @@ int unit_load(Unit *u) {
 
                 if (u->job_running_timeout != USEC_INFINITY && u->job_running_timeout > u->job_timeout)
                         log_unit_warning(u, "JobRunningTimeoutSec= is greater than JobTimeoutSec=, it has no effect.");
-
-                /* We finished loading, let's ensure our parents recalculate the members mask */
-                unit_invalidate_cgroup_members_masks(u);
         }
 
         assert((u->load_state != UNIT_MERGED) == !u->merged_into);

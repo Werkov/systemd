@@ -1619,16 +1619,6 @@ CGroupMask unit_get_enable_mask(Unit *u) {
         return mask;
 }
 
-void unit_invalidate_cgroup_members_masks(Unit *u) {
-        assert(u);
-
-        /* Recurse invalidate the member masks cache all the way up the tree */
-        u->cgroup_members_mask_valid = false;
-
-        if (UNIT_ISSET(u->slice))
-                unit_invalidate_cgroup_members_masks(UNIT_DEREF(u->slice));
-}
-
 const char *unit_get_realized_cgroup_path(Unit *u, CGroupMask mask) {
 
         /* Returns the realized cgroup path of the specified unit where all specified controllers are available. */
@@ -2119,7 +2109,7 @@ static bool unit_has_mask_enables_realized(
                 ((u->cgroup_enabled_mask | enable_mask) & CGROUP_MASK_V2) == (u->cgroup_enabled_mask & CGROUP_MASK_V2);
 }
 
-void unit_add_to_cgroup_realize_queue(Unit *u) {
+static void unit_add_to_cgroup_realize_queue(Unit *u) {
         assert(u);
 
         if (u->in_cgroup_realize_queue)
@@ -2327,11 +2317,12 @@ unsigned manager_dispatch_cgroup_realize_queue(Manager *m) {
         return n;
 }
 
-static void unit_add_siblings_to_cgroup_realize_queue(Unit *u) {
+void unit_add_siblings_to_cgroup_realize_queue(Unit *u) {
         Unit *slice;
+        Unit *self = u;
 
         /* This adds the siblings of the specified unit and the siblings of all parent units to the cgroup
-         * queue. (Including the specified unit itself and its ancestors.)
+         * queue. (Excluding the specified unit itself and but not its ancestors.)
          *
          * Propagation of realization "side-ways" (i.e. towards siblings) is relevant on cgroup-v1 where
          * scheduling becomes very weird if two units that own processes reside in the same slice, but one is
@@ -2346,9 +2337,14 @@ static void unit_add_siblings_to_cgroup_realize_queue(Unit *u) {
                 Unit *m;
                 void *v;
 
+                slice->cgroup_members_mask_valid = false;
+
                 HASHMAP_FOREACH_KEY(v, m, slice->dependencies[UNIT_BEFORE], i) {
                         /* Skip units that have a dependency on the slice but aren't actually in it. */
                         if (UNIT_DEREF(m->slice) != slice)
+                                continue;
+                        /* The origin must be handled separately by caller */
+                        if (m == self)
                                 continue;
 
                         /* No point in doing cgroup application for units without active processes. */
