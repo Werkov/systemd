@@ -589,10 +589,6 @@ void unit_free(Unit *u) {
         if (!u)
                 return;
 
-        /* A unit is being dropped from the tree, make sure our siblings and parent slice are realized properly */
-        if (UNIT_HAS_CGROUP_CONTEXT(u))
-                unit_add_siblings_to_cgroup_realize_queue(u);
-
         u->transient_file = safe_fclose(u->transient_file);
 
         if (!MANAGER_IS_RELOADING(u->manager))
@@ -630,6 +626,12 @@ void unit_free(Unit *u) {
 
         for (d = 0; d < _UNIT_DEPENDENCY_MAX; d++)
                 bidi_set_free(u, u->dependencies[d]);
+
+        /* A unit is being dropped from the tree, make sure our siblings and parent slice are realized
+         * properly. Do this after we detach the unit from slice tree in order to eliminate its effect on
+         * controller masks. */
+        if (UNIT_HAS_CGROUP_CONTEXT(u))
+                unit_add_siblings_to_cgroup_realize_queue(u);
 
         if (u->on_console)
                 manager_unref_console(u->manager);
