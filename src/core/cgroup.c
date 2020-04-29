@@ -2373,6 +2373,9 @@ void unit_add_siblings_to_cgroup_realize_queue(Unit *u) {
 
                 u = slice;
         }
+
+        /* Root slice comes last */
+        unit_add_to_cgroup_realize_queue(u);
 }
 
 int unit_realize_cgroup(Unit *u) {
