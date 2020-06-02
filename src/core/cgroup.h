@@ -182,6 +182,7 @@ typedef enum CGroupIOAccountingMetric {
 } CGroupIOAccountingMetric;
 
 typedef struct Unit Unit;
+typedef struct Slice Slice;
 typedef struct Manager Manager;
 
 usec_t cgroup_cpu_adjust_period(usec_t period, usec_t quota, usec_t resolution, usec_t max_period);
@@ -210,7 +211,7 @@ CGroupMask unit_get_enable_mask(Unit *u);
 
 void unit_invalidate_cgroup_members_masks(Unit *u);
 
-void unit_add_family_to_cgroup_realize_queue(Unit *u);
+void slice_add_family_to_cgroup_realize_queue(Slice *slice);
 
 const char *unit_get_realized_cgroup_path(Unit *u, CGroupMask mask);
 char *unit_default_cgroup_path(const Unit *u);

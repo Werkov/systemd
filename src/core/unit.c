@@ -648,7 +648,7 @@ void unit_free(Unit *u) {
         /* A unit is being dropped from the tree, make sure our family is realized properly. Do this after we
          * detach the unit from slice tree in order to eliminate its effect on controller masks. */
         if (UNIT_ISSET(u->slice))
-                unit_add_family_to_cgroup_realize_queue(UNIT_DEREF(u->slice));
+                slice_add_family_to_cgroup_realize_queue(SLICE(UNIT_DEREF(u->slice)));
 
         if (u->on_console)
                 manager_unref_console(u->manager);

@@ -23,6 +23,7 @@
 #include "path-util.h"
 #include "process-util.h"
 #include "procfs-util.h"
+#include "slice.h"
 #include "special.h"
 #include "stat-util.h"
 #include "stdio-util.h"
@@ -2313,9 +2314,10 @@ unsigned manager_dispatch_cgroup_realize_queue(Manager *m) {
         return n;
 }
 
-void unit_add_family_to_cgroup_realize_queue(Unit *u) {
-        assert(u);
-        assert(u->type == UNIT_SLICE);
+void slice_add_family_to_cgroup_realize_queue(Slice *s) {
+        Unit *u = UNIT(s);
+
+        assert(s);
 
         /* Family of a unit for is defined as (immediate) children of the unit and immediate children of all
          * its ancestors.
@@ -2383,7 +2385,7 @@ int unit_realize_cgroup(Unit *u) {
          * iteration and synchronously creates the parent cgroups (unit_realize_cgroup_now). */
 
         if (UNIT_ISSET(u->slice))
-                unit_add_family_to_cgroup_realize_queue(UNIT_DEREF(u->slice));
+                slice_add_family_to_cgroup_realize_queue(SLICE(UNIT_DEREF(u->slice)));
 
         /* And realize this one now (and apply the values) */
         return unit_realize_cgroup_now(u, manager_state(u->manager));
