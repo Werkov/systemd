@@ -1058,6 +1058,11 @@ static void cgroup_apply_io_device_weight(Unit *u, const char *dev_path, uint64_
 
         xsprintf(buf, "%u:%u %" PRIu64 "\n", major(dev), minor(dev), io_weight);
         (void) set_attribute_and_warn(u, "io", "io.weight", buf);
+
+        /* BFQ per-device weights work since Linux kernel v5.4, see set_io_weight() comment why doubling
+         * io.weight write. */
+        xsprintf(buf, "%u:%u %" PRIu64 "\n", major(dev), minor(dev), (io_weight + 9) / 10);
+        (void) set_attribute_and_warn(u, "io", "io.bfq.weight", buf);
 }
 
 static void cgroup_apply_blkio_device_weight(Unit *u, const char *dev_path, uint64_t blkio_weight) {
