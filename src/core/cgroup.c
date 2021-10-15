@@ -1047,6 +1047,28 @@ static uint64_t cgroup_weight_io_to_blkio(uint64_t io_weight) {
                      CGROUP_BLKIO_WEIGHT_MIN, CGROUP_BLKIO_WEIGHT_MAX);
 }
 
+static void set_bfq_weight(Unit *u, const char *controller, bool has_dev, dev_t dev, uint64_t io_weight) {
+        char buf[DECIMAL_STR_MAX(dev_t)*2+2+DECIMAL_STR_MAX(uint64_t)+1];
+        const char *p;
+        int r;
+
+        p = strjoina(controller, ".bfq.weight");
+retry:
+        if (has_dev)
+                xsprintf(buf, "%u:%u %" PRIu64 "\n", major(dev), minor(dev), io_weight);
+        else
+                xsprintf(buf, "%" PRIu64 "\n", io_weight);
+
+        r = set_attribute_and_warn(u, controller, p, buf);
+
+        /* Old kernels support only bfq.weight range 1..1000, clamp in such a case. */
+        if (r == -ERANGE && CGROUP_WEIGHT_IS_OK(io_weight) && io_weight > CGROUP_WEIGHT_BFQ_OLDMAX) {
+                io_weight = CGROUP_WEIGHT_BFQ_OLDMAX;
+                log_unit_warning(u, "Clamping weight to %" PRIu64 ".", CGROUP_WEIGHT_BFQ_OLDMAX);
+                goto retry;
+        }
+}
+
 static void cgroup_apply_io_device_weight(Unit *u, const char *dev_path, uint64_t io_weight) {
         char buf[DECIMAL_STR_MAX(dev_t)*2+2+DECIMAL_STR_MAX(uint64_t)+1];
         dev_t dev;
@@ -1061,8 +1083,7 @@ static void cgroup_apply_io_device_weight(Unit *u, const char *dev_path, uint64_
 
         /* BFQ per-device weights work since Linux kernel v5.4, see set_io_weight() comment why doubling
          * io.weight write. */
-        xsprintf(buf, "%u:%u %" PRIu64 "\n", major(dev), minor(dev), (io_weight + 9) / 10);
-        (void) set_attribute_and_warn(u, "io", "io.bfq.weight", buf);
+        set_bfq_weight(u, "io", true, dev, io_weight);
 }
 
 static void cgroup_apply_blkio_device_weight(Unit *u, const char *dev_path, uint64_t blkio_weight) {
@@ -1275,9 +1296,7 @@ static void set_io_weight(Unit *u, const char *controller, uint64_t weight) {
          * See also: https://github.com/systemd/systemd/pull/13335 and
          * https://github.com/torvalds/linux/commit/65752aef0a407e1ef17ec78a7fc31ba4e0b360f9.
          * The range is 1..1000 apparently. */
-        p = strjoina(controller, ".bfq.weight");
-        xsprintf(buf, "%" PRIu64 "\n", (weight + 9) / 10);
-        (void) set_attribute_and_warn(u, controller, p, buf);
+        set_bfq_weight(u, controller, false, 0, weight);
 }
 
 static void cgroup_apply_bpf_foreign_program(Unit *u) {
