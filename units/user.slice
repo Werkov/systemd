@@ -11,3 +11,7 @@
 Description=User and Session Slice
 Documentation=man:systemd.special(7)
 Before=slices.target
+
+[Slice]
+# Default weight to enable CPU controller regardless of user@.service
+CPUWeight=100
