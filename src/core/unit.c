@@ -241,7 +241,8 @@ static int unit_add_alias(Unit *u, char *donated_name) {
 }
 
 int unit_add_name(Unit *u, const char *text) {
-        _cleanup_free_ char *name = NULL, *instance = NULL;
+        _cleanup_free_ char *name = NULL;
+        _cleanup_(unit_instance_freep) UnitInstanceArg instance = {};
         UnitType t;
         int r;
 
@@ -249,7 +250,7 @@ int unit_add_name(Unit *u, const char *text) {
         assert(text);
 
         if (unit_name_is_valid(text, UNIT_NAME_TEMPLATE)) {
-                if (!u->instance)
+                if (unit_instance_is_null(u->instance))
                         return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EINVAL),
                                                     "instance is not set when adding name '%s': %m", text);
 
@@ -288,14 +289,15 @@ int unit_add_name(Unit *u, const char *text) {
         if (r < 0)
                 return log_unit_debug_errno(u, r, "failed to extract instance from name '%s': %m", name);
 
-        if (instance && !unit_type_may_template(t))
+        if (!unit_instance_is_null(instance) && !unit_type_may_template(t))
                 return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EINVAL), "templates are not allowed for name '%s': %m", name);
 
         /* Ensure that this unit either has no instance, or that the instance matches. */
-        if (u->type != _UNIT_TYPE_INVALID && !streq_ptr(u->instance, instance))
+        if (u->type != _UNIT_TYPE_INVALID && !unit_instance_eq(u->instance, instance))
+                // XXX proper unit_instance_to_string
                 return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EINVAL),
                                             "cannot add name %s, the instances don't match (\"%s\" != \"%s\").",
-                                            name, instance, u->instance);
+                                            name, instance.instance, u->instance.instance);
 
         if (u->id && !unit_type_may_alias(t))
                 return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EEXIST),
@@ -321,11 +323,12 @@ int unit_add_name(Unit *u, const char *text) {
         } else {
                 /* A new name, we don't need the set yet. */
                 assert(u->type == _UNIT_TYPE_INVALID);
-                assert(!u->instance);
+                assert(unit_instance_is_null(u->instance));
 
                 u->type = t;
                 u->id = TAKE_PTR(name);
-                u->instance = TAKE_PTR(instance);
+                u->instance = instance;
+                instance = (UnitInstanceArg){};
 
                 LIST_PREPEND(units_by_type, u->manager->units_by_type[t], u);
                 unit_init(u);
@@ -344,7 +347,7 @@ int unit_choose_id(Unit *u, const char *name) {
         assert(name);
 
         if (unit_name_is_valid(name, UNIT_NAME_TEMPLATE)) {
-                if (!u->instance)
+                if (unit_instance_is_null(u->instance))
                         return -EINVAL;
 
                 r = unit_name_replace_instance(name, u->instance, &t);
@@ -881,7 +884,7 @@ Unit* unit_free(Unit *u) {
         free(u->fragment_path);
         free(u->source_path);
         strv_free(u->dropin_paths);
-        free(u->instance);
+        unit_instance_free(u->instance);
 
         free(u->job_timeout_reboot_arg);
         free(u->reboot_arg);
@@ -1182,8 +1185,8 @@ int unit_merge(Unit *u, Unit *other) {
 
         if (!IN_SET(other->load_state, UNIT_STUB, UNIT_NOT_FOUND))
                 return -EEXIST;
-
-        if (!streq_ptr(u->instance, other->instance))
+        // XXX emptiness
+        if (!unit_instance_eq(u->instance, other->instance))
                 return -EINVAL;
 
         if (other->job)
@@ -1243,7 +1246,7 @@ int unit_merge_by_name(Unit *u, const char *name) {
         assert(name);
 
         if (unit_name_is_valid(name, UNIT_NAME_TEMPLATE)) {
-                if (!u->instance)
+                if (unit_instance_is_null(u->instance))
                         return -EINVAL;
 
                 r = unit_name_replace_instance(name, u->instance, &s);
@@ -1368,7 +1371,7 @@ int unit_add_exec_dependencies(Unit *u, ExecContext *c) {
         if (c->log_namespace) {
                 _cleanup_free_ char *socket_unit = NULL, *varlink_socket_unit = NULL;
 
-                r = unit_name_build_from_type("systemd-journald", c->log_namespace, UNIT_SOCKET, &socket_unit);
+                r = unit_name_build_from_type("systemd-journald", UNIT_ARG_INSTANCE(c->log_namespace), UNIT_SOCKET, &socket_unit);
                 if (r < 0)
                         return r;
 
@@ -1376,7 +1379,7 @@ int unit_add_exec_dependencies(Unit *u, ExecContext *c) {
                 if (r < 0)
                         return r;
 
-                r = unit_name_build_from_type("systemd-journald-varlink", c->log_namespace, UNIT_SOCKET, &varlink_socket_unit);
+                r = unit_name_build_from_type("systemd-journald-varlink", UNIT_ARG_INSTANCE(c->log_namespace), UNIT_SOCKET, &varlink_socket_unit);
                 if (r < 0)
                         return r;
 
@@ -3352,7 +3355,7 @@ static int resolve_template(Unit *u, const char *name, char **buf, const char **
                 return 0;
         }
 
-        if (u->instance)
+        if (!unit_instance_is_null(u->instance))
                 r = unit_name_replace_instance(name, u->instance, buf);
         else {
                 _cleanup_free_ char *i = NULL;
@@ -3361,7 +3364,8 @@ static int resolve_template(Unit *u, const char *name, char **buf, const char **
                 if (r < 0)
                         return r;
 
-                r = unit_name_replace_instance(name, i, buf);
+                // XXX Why is prefix converted to instance name?
+                r = unit_name_replace_instance(name, UNIT_ARG_INSTANCE(i), buf);
         }
         if (r < 0)
                 return r;
@@ -3531,7 +3535,7 @@ int unit_set_default_slice(Unit *u) {
         if (UNIT_GET_SLICE(u))
                 return 0;
 
-        if (u->instance) {
+        if (!unit_instance_is_null(u->instance)) {
                 _cleanup_free_ char *prefix = NULL, *escaped = NULL;
 
                 /* Implicitly place all instantiated units in their
@@ -3812,7 +3816,7 @@ int unit_add_blockdev_dependency(Unit *u, const char *what, UnitDependencyMask m
         if (r < 0)
                 return r;
 
-        r = unit_name_build("blockdev", escaped, ".target", &target);
+        r = unit_name_build("blockdev", UNIT_ARG_INSTANCE(escaped), ".target", &target);
         if (r < 0)
                 return r;
 
