@@ -731,6 +731,9 @@ int unit_file_find_fragment(
         _cleanup_set_free_ Set *names = NULL;
         int r;
 
+        // XXX I need foo.service to check also foo#.service
+        // foo#.service may also create foo#first_id.service
+
         /* Finds a fragment path, and returns the set of names:
          * if we have …/foo.service and …/foo-alias.service→foo.service,
          * and …/foo@.service and …/foo-alias@.service→foo@.service,
@@ -768,6 +771,16 @@ int unit_file_find_fragment(
                 r = unit_name_template(unit_name, &template);
                 if (r < 0)
                         return log_debug_errno(r, "Failed to determine template name: %m");
+
+                r = unit_ids_map_get(unit_ids_map, template, &fragment);
+                if (r < 0 && !IN_SET(r, -ENOENT, -ENXIO))
+                        return log_debug_errno(r, "Cannot load template %s: %m", template);
+        } else if (!fragment && name_type & UNIT_NAME_PLAIN) {
+                /* Is this rtemplate handle service?
+                 * foo.service should load fragment from foo#.service */
+                r = unit_name_make_rtemplate(unit_name, &template);
+                if (r < 0)
+                        return log_debug_errno(r, "Failed to make rtemplate name: %m");
 
                 r = unit_ids_map_get(unit_ids_map, template, &fragment);
                 if (r < 0 && !IN_SET(r, -ENOENT, -ENXIO))
