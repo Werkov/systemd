@@ -50,6 +50,7 @@ typedef enum ServiceExecCommand {
         SERVICE_EXEC_START,
         SERVICE_EXEC_START_POST,
         SERVICE_EXEC_RELOAD,
+        SERVICE_EXEC_RESTART_PRE,
         SERVICE_EXEC_STOP,
         SERVICE_EXEC_STOP_POST,
         _SERVICE_EXEC_COMMAND_MAX,
@@ -132,6 +133,7 @@ struct Service {
         bool timeout_abort_set;
         usec_t runtime_max_usec;
         usec_t runtime_rand_extra_usec;
+        usec_t runtime_passive_max_usec;
         ServiceTimeoutFailureMode timeout_start_failure_mode;
         ServiceTimeoutFailureMode timeout_stop_failure_mode;
 

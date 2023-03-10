@@ -5043,6 +5043,7 @@ static const char* const service_exec_command_table[_SERVICE_EXEC_COMMAND_MAX] =
         [SERVICE_EXEC_START]      = "ExecStart",
         [SERVICE_EXEC_START_POST] = "ExecStartPost",
         [SERVICE_EXEC_RELOAD]     = "ExecReload",
+        [SERVICE_EXEC_RESTART_PRE]= "ExecRestartPre",
         [SERVICE_EXEC_STOP]       = "ExecStop",
         [SERVICE_EXEC_STOP_POST]  = "ExecStopPost",
 };
