@@ -1875,6 +1875,7 @@ static int service_spawn_internal(
                 return r;
 
         *ret_pid = pid;
+        log_unit_debug(UNIT(s), "rewrite pid="PID_FMT, pid);
 
         return 0;
 }
@@ -2231,6 +2232,7 @@ static void service_enter_passivate(Service *s, ServiceResult f) {
                                   s->timeout_stop_usec, // XXX document or change this, see also service_run_next_control
                                   EXEC_APPLY_SANDBOXING|EXEC_APPLY_CHROOT|EXEC_IS_CONTROL|EXEC_SETENV_RESULT|EXEC_CONTROL_CGROUP,
                                   &s->control_pid);
+                log_unit_debug(UNIT(s), "spawned ExecRestartPre= p=%p.%p, c="PID_FMT".", s, &s->control_pid, s->control_pid);
                 if (r < 0)
                         goto fail;
 
@@ -3894,6 +3896,7 @@ static void service_sigchld_event(Unit *u, pid_t pid, int code, int status) {
         else
                 assert_not_reached();
 
+        log_unit_debug(u, "sigchld "PID_FMT", m="PID_FMT", c="PID_FMT", p=%p.%p", pid, s->main_pid, s->control_pid, s, &s->control_pid);
         if (s->main_pid == pid) {
                 /* Clean up the exec_fd event source. We want to do this here, not later in
                  * service_set_state(), because service_enter_stop_post() calls service_spawn().
