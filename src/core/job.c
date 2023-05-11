@@ -850,6 +850,7 @@ static int job_perform_on_unit(Job **j) {
         t = (*j)->type;
         id = (*j)->id;
         a = (*j)->activation_details;
+        log_unit_debug(u, "%s:before, t=%i, j=%p", __func__, t, j);
 
         switch (t) {
                 case JOB_START:
@@ -875,6 +876,7 @@ static int job_perform_on_unit(Job **j) {
          * for units for which there's no 'activating' phase (i.e. because we transition directly from 'inactive' to
          * 'active') we'll possibly skip the "Starting..." message. */
         *j = manager_get_job(m, id);
+        log_unit_debug(u, "%s:after, t=%i, j=%p", __func__, t, j);
         if (*j && r > 0)
                 job_emit_start_message(u, id, t);
 
