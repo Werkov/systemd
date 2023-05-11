@@ -1259,6 +1259,7 @@ static void service_set_state(Service *s, ServiceState state) {
                     SERVICE_CLEANING))
                 s->timer_event_source = sd_event_source_disable_unref(s->timer_event_source);
 
+        /* TODO replace: All except for: SERVICE_CONDITION, SERVICE_START_PRE, SERVICE_DEAD, SERVICE_FAILED, SERVICE_AUTO_RESTART (checkme)*/
         if (!IN_SET(state,
                     SERVICE_START, SERVICE_START_POST,
                     SERVICE_RUNNING,
@@ -1270,6 +1271,7 @@ static void service_set_state(Service *s, ServiceState state) {
                 s->main_command = NULL;
         }
 
+        /* TODO replace: All except for: SERVICE_RUNNING, SERVICE_DEAD, SERVICE_FAILED, SERVICE_AUTO_RESTART (checkme) */
         if (!IN_SET(state,
                     SERVICE_CONDITION, SERVICE_START_PRE, SERVICE_START, SERVICE_START_POST,
                     SERVICE_RELOAD, SERVICE_RELOAD_SIGNAL, SERVICE_RELOAD_NOTIFY,
