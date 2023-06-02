@@ -59,6 +59,7 @@
 #include "seccomp-util.h"
 #include "securebits-util.h"
 #include "selinux-util.h"
+#include "service.h"
 #include "signal-util.h"
 #include "socket-netlink.h"
 #include "specifier.h"
@@ -6256,6 +6257,7 @@ int unit_load_fragment(Unit *u) {
                                         if (r < 0)
                                                 return r;
 
+                                        service_set_current_generation(SERVICE(u), SERVICE(uf));
                                         unit_add_to_load_queue(uf);
                                 }
                         } else if (!unit_name_is_valid(u->id, UNIT_NAME_GENERATION))
