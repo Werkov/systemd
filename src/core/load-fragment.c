@@ -6268,6 +6268,15 @@ int unit_load_fragment(Unit *u) {
                 }
         }
 
+        // DEBUG
+        if (set_size(names) > 0) {
+                log_unit_debug(u, "id=%s, u=%s", id, u->id);
+                char *nm;
+                SET_FOREACH(nm, names) {
+                        log_debug("name=%s", nm);
+                }
+        }
+
         return merge_by_names(u, names, id);
 }
 
