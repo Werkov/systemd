@@ -193,6 +193,7 @@ int unit_new_next_generation(Manager *m, Unit *u, const char *name, Unit **ret) 
         r = unit_new_for_name(m, sizeof(Service), new_id, &next_u);
         if (r < 0)
                 return log_unit_error_errno(u, r, "Failed to allocate generation unit %s: %m", new_id);
+        log_unit_warning(u, "prepared a new generation %s", next_u->id);
 
         *ret = next_u;
         return 0;
