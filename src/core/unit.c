@@ -477,7 +477,7 @@ bool unit_may_gc(Unit *u) {
          * using markers to properly collect dependency loops.
          */
 
-        if (u->job || u->nop_job)
+        if (u->job || u->nop_job || u->rtemplate_job)
                 return false;
 
         if (u->perpetual)

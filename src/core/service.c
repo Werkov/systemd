@@ -2902,8 +2902,7 @@ static int service_stop(Unit *u) {
                 log_unit_debug(UNIT(h_service), "preloading %s", un->id);
 
                 h_job->unit_next = un;
-                /* XXX Abuse ->job to prevent GC'ing unit_next during job duration, UnitRef? */
-                h_job->unit_next->job = h_job;
+                h_job->unit_next->rtemplate_job = true;
 
                 service_enter_passivate(s, SERVICE_SUCCESS);
                 return 1;

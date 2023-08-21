@@ -1011,7 +1011,7 @@ int job_finish_and_invalidate(Job *j, JobResult result, bool recursive, bool alr
                 if (j->unit_next) {
                         service_set_current_generation(SERVICE(u), SERVICE(j->unit_next));
                         // XXX pairs with service_stop()
-                        j->unit_next->job = NULL;
+                        j->unit_next->rtemplate_job = false;
                         j->unit_next = NULL;
                 }
 
