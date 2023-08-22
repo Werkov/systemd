@@ -49,13 +49,16 @@ EOF
 systemctl daemon-reload
 
 ### test simple ZEDR
+systemd-analyze set-log-level debug
 
+logger "MARK start"
 systemctl start testservice-83-foo.service
 # check one gen exists
 active_inst="$(systemctl show -p Following --value testservice-83-foo.service)"
 [[ "$active_inst" =~ testservice-83-foo#[^.]*.service ]]
 systemctl is-active "$active_inst"
 
+logger "MARK restart"
 systemctl restart testservice-83-foo.service
 # check two gens exist
 active_inst2="$(systemctl show -p Following --value testservice-83-foo.service)"
@@ -68,11 +71,13 @@ sleep 5
 ! systemctl is-active "$active_inst"
 systemctl is-active "$active_inst2"
 
+logger "MARK stop"
 systemctl stop testservice-83-foo.service
 sleep 1
 # check no gen exists
 ! systemctl is-active "$active_inst"
 ! systemctl is-active "$active_inst2"
 
+systemd-analyze set-log-level info
 
 # TODO add other tests for ZEDR failure modes/interactions
