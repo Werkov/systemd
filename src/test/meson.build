@@ -435,6 +435,10 @@ executables += [
                 'sources' : files('test-watchdog.c'),
                 'type' : 'unsafe',
         },
+        test_template + {
+                'sources' : files('test-service-rtemplate.c'),
+                'type' : 'manual',
+        },
 
         # Symbol tests
         test_template + {
