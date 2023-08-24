@@ -1899,7 +1899,7 @@ static int build_environment(
         assert(p);
         assert(ret);
 
-#define N_ENV_VARS 19
+#define N_ENV_VARS 20
         our_env = new0(char*, N_ENV_VARS + _EXEC_DIRECTORY_TYPE_MAX);
         if (!our_env)
                 return -ENOMEM;
@@ -1977,6 +1977,14 @@ static int build_environment(
 
         if (!sd_id128_is_null(u->invocation_id)) {
                 if (asprintf(&x, "INVOCATION_ID=" SD_ID128_FORMAT_STR, SD_ID128_FORMAT_VAL(u->invocation_id)) < 0)
+                        return -ENOMEM;
+
+                our_env[n_env++] = x;
+        }
+
+        if (!isempty(u->instance.generation)) {
+                x = strjoin("GENERATION_ID=", u->instance.generation);
+                if (!x)
                         return -ENOMEM;
 
                 our_env[n_env++] = x;
