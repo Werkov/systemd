@@ -1434,6 +1434,36 @@ static int service_coldplug(Unit *u) {
         return 0;
 }
 
+static int service_rtemplate_handle(Service *s, Service **ret) {
+        _cleanup_free_ char *name = NULL, *prefix = NULL;
+        Unit *u = UNIT(s);
+        Unit *handle;
+        int r;
+
+        assert(s);
+        assert(ret);
+
+        if (!unit_name_is_valid(u->id, UNIT_NAME_GENERATION))
+                return 0;
+
+        r = unit_name_to_prefix(u->id, &prefix);
+        if (r < 0)
+                return log_unit_error_errno(u, r, "Failed to build prefix unit name: %m");
+
+        r = unit_name_build_from_type(prefix, UNIT_ARG_GENERATION(NULL), UNIT_SERVICE, &name);
+        if (r < 0)
+                return log_unit_error_errno(u, r, "Failed to build unit name: %m");
+
+        handle = manager_get_unit(u->manager, name);
+        if (!handle) {
+                log_unit_warning(u, "Unhandled rtemplate generation.");
+                return 0;
+        }
+
+        *ret = SERVICE(handle);
+        return 1;
+}
+
 static int service_collect_fds(
                 Service *s,
                 int **fds,
@@ -2851,36 +2881,6 @@ static int service_start(Unit *u) {
         u->reset_accounting = true;
 
         service_enter_condition(s);
-        return 1;
-}
-
-static int service_rtemplate_handle(Service *s, Service **ret) {
-        _cleanup_free_ char *name = NULL, *prefix = NULL;
-        Unit *u = UNIT(s);
-        Unit *handle;
-        int r;
-
-        assert(s);
-        assert(ret);
-
-        if (!unit_name_is_valid(u->id, UNIT_NAME_GENERATION))
-                return 0;
-
-        r = unit_name_to_prefix(u->id, &prefix);
-        if (r < 0)
-                return log_unit_error_errno(u, r, "Failed to build prefix unit name: %m");
-
-        r = unit_name_build_from_type(prefix, UNIT_ARG_GENERATION(NULL), UNIT_SERVICE, &name);
-        if (r < 0)
-                return log_unit_error_errno(u, r, "Failed to build unit name: %m");
-
-        handle = manager_get_unit(u->manager, name);
-        if (!handle) {
-                log_unit_warning(u, "Unhandled rtemplate generation.");
-                return 0;
-        }
-
-        *ret = SERVICE(handle);
         return 1;
 }
 
