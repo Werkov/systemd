@@ -1283,6 +1283,7 @@ static void unit_gc_mark_good(Unit *u, unsigned gc_marker) {
         Unit *other;
 
         u->gc_marker = gc_marker + GC_OFFSET_GOOD;
+        log_unit_debug(u, "unit_gc_mark_good(%u)", gc_marker);
 
         /* Recursively mark referenced units as GOOD as well */
         UNIT_FOREACH_DEPENDENCY(other, u, UNIT_ATOM_REFERENCES)
@@ -1378,7 +1379,7 @@ static unsigned manager_dispatch_gc_unit_queue(Manager *m) {
                 if (IN_SET(u->gc_marker - gc_marker,
                            GC_OFFSET_BAD, GC_OFFSET_UNSURE)) {
                         if (u->id)
-                                log_unit_warning(u, "Collecting.");
+                                log_unit_warning(u, "Collecting. %u", u->gc_marker - gc_marker);
                         u->gc_marker = gc_marker + GC_OFFSET_BAD;
                         unit_add_to_cleanup_queue(u);
                 }
