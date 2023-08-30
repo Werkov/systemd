@@ -244,18 +244,24 @@ static void service_override_notify_access(Service *s, NotifyAccess notify_acces
 }
 
 void service_set_current_generation(Service *s, Service *cs) {
+        Unit *prev_gen;
+
         assert(s);
         assert(cs);
 
         log_unit_debug(UNIT(s), "setting current generation %s", UNIT(cs)->id);
+        prev_gen = UNIT_DEREF(s->current_gen_service);
         unit_ref_set(&s->current_gen_service, UNIT(s), UNIT(cs));
         /* main service follows new current state */
         service_set_state(s, cs->state);
-        /* current_gen will have stop job via follow-forwarding,
-         * all old generations will have propagated jobs */
-        /* s -- propagates stop -> cs
-         * cs -- references -> s */
-        unit_add_dependency(UNIT(cs), UNIT_STOP_PROPAGATED_FROM, UNIT(s), true, UNIT_DEPENDENCY_IMPLICIT);
+        /* current_gen_service will have stop job via follow-forwarding,
+         * all matured generations will have propagated jobs.
+         * State of current_gen_service is observed by the handle service, so handle service will not be GC'd
+         * as long as current_gen_service is active. We need a reference from matured generations to keep
+         * handle service around (to ultimately stop them).
+         */
+        if (prev_gen)
+                unit_add_dependency(prev_gen, UNIT_STOP_PROPAGATED_FROM, UNIT(s), true, UNIT_DEPENDENCY_IMPLICIT);
         // XXX transfer socket_fd between generations?
 }
 
