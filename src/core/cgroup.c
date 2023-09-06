@@ -4020,9 +4020,9 @@ static uint64_t unit_get_effective_limit_one(Unit *u, CGroupLimitType type) {
         cc = unit_get_cgroup_context(u);
         switch (type) {
                 /* Note: on legacy/hybrid hierarchies memory_max stays CGROUP_LIMIT_MAX unless configured
-                 * explicitly. Effective value of MemoryLimit= (cgroup v1) is not implemented. */
+                 * explicitly, look at MemoryLimit= (cgroup v1) too. */
                 case CGROUP_LIMIT_MEMORY_MAX:
-                        return cc->memory_max;
+                        return unit_has_unified_memory_config(u) ? cc->memory_max : cc->memory_limit;
                 case CGROUP_LIMIT_MEMORY_HIGH:
                         return cc->memory_high;
                 case CGROUP_LIMIT_TASKS_MAX:
