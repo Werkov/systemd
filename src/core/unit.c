@@ -570,7 +570,6 @@ void unit_add_to_gc_queue(Unit *u) {
         if (!unit_may_gc(u))
                 return;
 
-        log_unit_debug(u, "added to GC queue");
         LIST_APPEND(gc_queue, u->manager->gc_unit_queue, u);
         u->in_gc_queue = true;
 }
@@ -4296,8 +4295,6 @@ void unit_ref_unset(UnitRef *ref) {
 
         if (!ref->target)
                 return;
-
-        log_unit_debug(ref->source, "ref_unset, target=%s", ref->target->id);
 
         /* We are about to drop a reference to the unit, make sure the garbage collection has a look at it as it might
          * be unreferenced now. */
