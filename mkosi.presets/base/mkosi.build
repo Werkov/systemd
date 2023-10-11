@@ -72,6 +72,7 @@ if [ ! -f "$BUILDDIR"/build.ninja ]; then
         -D translations=false
         -D version-tag="${VERSION_TAG}"
         -D mode=developer
+        -D log-trace=true
         -D b_sanitize="${SANITIZERS:-none}"
         -D install-tests=true
         -D tests=unsafe

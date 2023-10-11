@@ -1119,6 +1119,7 @@ int transaction_add_job_and_dependencies(
                         UNIT_FOREACH_DEPENDENCY(dep, ret->unit, UNIT_ATOM_PROPAGATE_STOP_GRACEFUL) {
                                 JobType nt;
                                 Job *j;
+                                log_unit_debug(ret->unit, "STOP_GRACEFUL to %s", dep->id);
 
                                 j = hashmap_get(tr->jobs, dep);
                                 nt = job_type_propagate_stop_graceful(j);
