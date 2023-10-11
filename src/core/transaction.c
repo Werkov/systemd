@@ -914,7 +914,8 @@ static JobType job_type_propagate_stop_graceful(Job *j, bool is_stop) {
         if (!j)
                 return type;
 
-        LIST_FOREACH(transaction, i, j)
+        LIST_FOREACH(transaction, i, j) {
+                assert(i->unit == j->unit);
                 switch (i->type) {
 
                 case JOB_STOP:
@@ -933,6 +934,7 @@ static JobType job_type_propagate_stop_graceful(Job *j, bool is_stop) {
                         ;
 
                 }
+        }
 
         return type;
 }
