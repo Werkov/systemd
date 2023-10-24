@@ -959,6 +959,7 @@ int unit_following_set(Unit *u, Set **s);
 const char *unit_slice_name(Unit *u);
 
 bool unit_stop_pending(Unit *u) _pure_;
+bool unit_stop_imminent(Unit *u);
 bool unit_inactive_or_pending(Unit *u) _pure_;
 bool unit_active_or_pending(Unit *u);
 bool unit_will_restart_default(Unit *u);

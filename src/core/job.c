@@ -505,7 +505,7 @@ int job_type_merge_and_collapse(JobType *a, JobType b, Unit *u) {
         return 0;
 }
 
-static bool job_is_runnable(Job *j) {
+bool job_is_runnable(Job *j) {
         Unit *other;
 
         assert(j);

@@ -3919,6 +3919,12 @@ Unit *unit_following(Unit *u) {
         return NULL;
 }
 
+bool unit_stop_imminent(Unit *u) {
+        if (!unit_stop_pending(u))
+                return false;
+        return job_is_runnable(u->job);
+}
+
 bool unit_stop_pending(Unit *u) {
         assert(u);
 

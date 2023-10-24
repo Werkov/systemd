@@ -2286,7 +2286,7 @@ static void socket_enter_running(Socket *s, int cfd_in) {
         assert(s);
 
         /* We don't take connections anymore if we are supposed to shut down anyway */
-        if (unit_stop_pending(UNIT(s))) {
+        if (unit_stop_imminent(UNIT(s))) {
 
                 log_unit_debug(UNIT(s), "Suppressing connection request since unit stop is scheduled.");
 
