@@ -907,12 +907,13 @@ void transaction_add_propagate_reload_jobs(
         }
 }
 
-static JobType job_type_propagate_stop_graceful(Job *j, bool is_stop) {
+static JobType job_type_propagate_stop_graceful(Job *j) {
         JobType type;
-        type = is_stop ? JOB_STOP : JOB_NOP;
 
         if (!j)
-                return type;
+                return JOB_STOP;
+
+        type = JOB_STOP;
 
         LIST_FOREACH(transaction, i, j) {
                 assert(i->unit == j->unit);
@@ -1123,7 +1124,7 @@ int transaction_add_job_and_dependencies(
                                 log_unit_debug(ret->unit, "STOP_GRACEFUL to %s", dep->id);
 
                                 j = hashmap_get(tr->jobs, dep);
-                                nt = job_type_propagate_stop_graceful(j, is_stop);
+                                nt = job_type_propagate_stop_graceful(j);
 
                                 if (nt == JOB_NOP)
                                         continue;
