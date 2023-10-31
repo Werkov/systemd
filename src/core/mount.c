@@ -1769,6 +1769,7 @@ static int mount_load_proc_self_mountinfo(Manager *m, bool set_flags) {
 
         assert(m);
 
+        log_debug("%s start", __func__);
         r = libmount_parse(NULL, NULL, &table, &iter);
         if (r < 0)
                 return log_error_errno(r, "Failed to parse /proc/self/mountinfo: %m");
@@ -1795,6 +1796,7 @@ static int mount_load_proc_self_mountinfo(Manager *m, bool set_flags) {
 
                 (void) mount_setup_unit(m, device, path, options, fstype, set_flags);
         }
+        log_debug("%s end", __func__);
 
         return 0;
 }
@@ -1803,6 +1805,7 @@ static int mount_enumerate_defer(sd_event_source *s, void *userdata) {
         Manager *m = userdata;
         int r;
 
+        log_debug("%s", __func__);
         if (!m->ready_sent)
                 return 0;
 

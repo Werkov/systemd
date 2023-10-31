@@ -4008,6 +4008,7 @@ static void manager_send_ready(Manager *m) {
         sd_notifyf(false,
                    "READY=1\n"
                    "STATUS=Reached " SPECIAL_BASIC_TARGET ".");
+        log_debug("%s", __func__);
 }
 
 static void manager_check_basic_target(Manager *m) {
