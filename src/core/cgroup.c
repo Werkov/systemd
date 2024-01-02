@@ -4282,6 +4282,8 @@ int unit_get_effective_limit(Unit *u, CGroupLimitType type, uint64_t *ret) {
 
         assert(u);
         assert(ret);
+        assert(type >= 0);
+        assert(type < _CGROUP_LIMIT_TYPE_MAX);
 
         if (!UNIT_HAS_CGROUP_CONTEXT(u))
                 return -EINVAL;
