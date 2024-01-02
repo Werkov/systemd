@@ -4253,14 +4253,6 @@ static uint64_t unit_get_effective_limit_one(Unit *u, CGroupLimitType type) {
         assert(u);
         assert(UNIT_HAS_CGROUP_CONTEXT(u));
 
-        static const size_t members[_CGROUP_LIMIT_TYPE_MAX] = {
-                /* Note: on legacy/hybrid hierarchies memory_max stays CGROUP_LIMIT_MAX unless configured
-                 * explicitly. Effective value of MemoryLimit= (cgroup v1) is not implemented. */
-                [CGROUP_LIMIT_MEMORY_MAX]  = offsetof(CGroupContext, memory_max),
-                [CGROUP_LIMIT_MEMORY_HIGH] = offsetof(CGroupContext, memory_high),
-                [CGROUP_LIMIT_TASKS_MAX]   = offsetof(CGroupContext, tasks_max),
-        };
-
         /* Use callbacks for system global or container's root cgroup attributes */
         if (unit_has_name(u, SPECIAL_ROOT_SLICE))
                 switch (type) {
@@ -4274,7 +4266,18 @@ static uint64_t unit_get_effective_limit_one(Unit *u, CGroupLimitType type) {
                 }
 
         cc = unit_get_cgroup_context(u);
-        return *(uint64_t *)((uint8_t *)cc + members[type]);
+        switch (type) {
+                /* Note: on legacy/hybrid hierarchies memory_max stays CGROUP_LIMIT_MAX unless configured
+                 * explicitly. Effective value of MemoryLimit= (cgroup v1) is not implemented. */
+                case CGROUP_LIMIT_MEMORY_MAX:
+                        return cc->memory_max;
+                case CGROUP_LIMIT_MEMORY_HIGH:
+                        return cc->memory_high;
+                case CGROUP_LIMIT_TASKS_MAX:
+                        return cgroup_tasks_max_resolve(&cc->tasks_max);
+                default:
+                        assert_not_reached();
+        }
 }
 
 int unit_get_effective_limit(Unit *u, CGroupLimitType type, uint64_t *ret) {
