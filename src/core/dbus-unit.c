@@ -1451,12 +1451,6 @@ static int property_get_effective_limit(
                 void *userdata,
                 sd_bus_error *error) {
 
-        static const char *const table[_CGROUP_LIMIT_TYPE_MAX] = {
-                [CGROUP_LIMIT_MEMORY_MAX]  = "EffectiveMemoryMax",
-                [CGROUP_LIMIT_MEMORY_HIGH] = "EffectiveMemoryHigh",
-                [CGROUP_LIMIT_TASKS_MAX]   = "EffectiveTasksMax",
-        };
-
         uint64_t value = CGROUP_LIMIT_MAX;
         Unit *u = ASSERT_PTR(userdata);
         ssize_t type;
@@ -1465,7 +1459,7 @@ static int property_get_effective_limit(
         assert(reply);
         assert(property);
 
-        assert_se((type = string_table_lookup(table, ELEMENTSOF(table), property)) >= 0);
+        assert_se((type = cgroup_limit_type_from_string(property)) >= 0);
         (void) unit_get_effective_limit(u, type, &value);
         return sd_bus_message_append(reply, "t", value);
 }
