@@ -1039,6 +1039,7 @@ static void mount_enter_signal(Mount *m, MountState state, MountResult f) {
                         state_to_kill_operation(state),
                         /* main_pid= */ NULL,
                         &m->control_pid,
+                        /* excl_pids =*/ NULL,
                         /* main_pid_alien= */ false);
         if (r < 0) {
                 log_unit_warning_errno(UNIT(m), r, "Failed to kill processes: %m");

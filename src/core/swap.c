@@ -740,6 +740,7 @@ static void swap_enter_signal(Swap *s, SwapState state, SwapResult f) {
                         state_to_kill_operation(s, state),
                         /* main_pid= */ NULL,
                         &s->control_pid,
+                        /* excl_pids =*/ NULL,
                         /* main_pid_alien= */ false);
         if (r < 0) {
                 log_unit_warning_errno(UNIT(s), r, "Failed to kill processes: %m");

@@ -4755,6 +4755,7 @@ int unit_kill_context(
                 KillOperation k,
                 PidRef* main_pid,
                 PidRef* control_pid,
+                Set *excl_pids,
                 bool main_pid_alien) {
 
         bool wait_for_exit = false, send_sighup;
@@ -4769,6 +4770,8 @@ int unit_kill_context(
 
         if (c->kill_mode == KILL_NONE)
                 return 0;
+        // XXX set_contains(excl_pids, PID_TO_PTR(main_pid))
+        // XXX set_contains(excl_pids, PID_TO_PTR(control_pid))
 
         bool noteworthy;
         sig = operation_to_signal(c, k, &noteworthy);
@@ -4825,6 +4828,10 @@ int unit_kill_context(
                 pid_set = unit_pid_set(main_pid ? main_pid->pid : 0, control_pid ? control_pid->pid : 0);
                 if (!pid_set)
                         return -ENOMEM;
+
+                r = set_merge(pid_set, excl_pids);
+                if (r < 0)
+                        return r;
 
                 r = cg_kill_recursive(
                                 u->cgroup_path,

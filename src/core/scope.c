@@ -323,6 +323,7 @@ static void scope_enter_signal(Scope *s, ScopeState state, ScopeResult f) {
                                                               KILL_TERMINATE,
                                 /* main_pid= */ NULL,
                                 /* control_pid= */ NULL,
+                                /* excl_pids =*/ NULL,
                                 /* main_pid_alien= */ false);
                 if (r < 0) {
                         log_unit_warning_errno(UNIT(s), r, "Failed to kill processes: %m");

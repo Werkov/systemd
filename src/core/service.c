@@ -503,6 +503,7 @@ static int service_add_fd_store(Service *s, int fd_in, const char *name, bool do
         _cleanup_(service_fd_store_unlinkp) ServiceFDStore *fs = NULL;
         _cleanup_(asynchronous_closep) int fd = ASSERT_FD(fd_in);
         struct stat st;
+        pid_t pid;
         int r;
 
         /* fd is always consumed even if the function fails. */
@@ -542,10 +543,16 @@ static int service_add_fd_store(Service *s, int fd_in, const char *name, bool do
         if (!fs->fdname)
                 return -ENOMEM;
 
+        if (pidfd_get_pid(fs->fd, &pid) == 0) {
+                r = set_put(s->fd_store_pids, PID_TO_PTR(pid));
+                if (r < 0)
+                        return r;
+        } /* error means non-pidfd type of fd */
+
         if (do_poll) {
                 r = sd_event_add_io(UNIT(s)->manager->event, &fs->event_source, fs->fd, 0, on_fd_store_io, fs);
                 if (r < 0 && r != -EPERM) /* EPERM indicates fds that aren't pollable, which is OK */
-                        return r;
+                        return r; // XXX extract from fd_store_pids
                 else if (r >= 0)
                         (void) sd_event_source_set_description(fs->event_source, "service-fd-store");
         }
@@ -2127,6 +2134,7 @@ static void service_enter_signal(Service *s, ServiceState state, ServiceResult f
                         kill_operation,
                         &s->main_pid,
                         &s->control_pid,
+                        s->fd_store_pids, // XXX condition on config?
                         s->main_pid_alien);
         if (r < 0) {
                 log_unit_warning_errno(UNIT(s), r, "Failed to kill processes: %m");
