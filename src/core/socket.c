@@ -2052,7 +2052,7 @@ static void socket_enter_stop_post(Socket *s, SocketResult f) {
                 socket_enter_signal(s, SOCKET_FINAL_SIGTERM, SOCKET_SUCCESS);
 }
 
-static int state_to_kill_operation(Socket *s, SocketState state) {
+static KillOperation state_to_kill_operation(Socket *s, SocketState state) {
         if (state == SOCKET_STOP_PRE_SIGTERM && unit_has_job_type(UNIT(s), JOB_RESTART))
                 return KILL_RESTART;
 

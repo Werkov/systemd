@@ -2080,7 +2080,7 @@ static void service_enter_stop_post(Service *s, ServiceResult f) {
                 service_enter_signal(s, SERVICE_FINAL_SIGTERM, SERVICE_SUCCESS);
 }
 
-static int state_to_kill_operation(Service *s, ServiceState state) {
+static KillOperation state_to_kill_operation(Service *s, ServiceState state) {
         switch (state) {
 
         case SERVICE_STOP_WATCHDOG:
@@ -2105,7 +2105,8 @@ static int state_to_kill_operation(Service *s, ServiceState state) {
 }
 
 static void service_enter_signal(Service *s, ServiceState state, ServiceResult f) {
-        int kill_operation, r;
+        KillOperation kill_operation;
+        int r;
 
         assert(s);
 

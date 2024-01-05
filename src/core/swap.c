@@ -715,7 +715,7 @@ static void swap_enter_dead_or_active(Swap *s, SwapResult f) {
                 swap_enter_dead(s, f);
 }
 
-static int state_to_kill_operation(Swap *s, SwapState state) {
+static KillOperation state_to_kill_operation(Swap *s, SwapState state) {
         if (state == SWAP_DEACTIVATING_SIGTERM) {
                 if (unit_has_job_type(UNIT(s), JOB_RESTART))
                         return KILL_RESTART;

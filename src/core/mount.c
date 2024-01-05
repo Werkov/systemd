@@ -1007,7 +1007,7 @@ static void mount_enter_dead_or_mounted(Mount *m, MountResult f) {
                 mount_enter_dead(m, f);
 }
 
-static int state_to_kill_operation(MountState state) {
+static KillOperation state_to_kill_operation(MountState state) {
         switch (state) {
 
         case MOUNT_REMOUNTING_SIGTERM:
