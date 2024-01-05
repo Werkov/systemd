@@ -4765,8 +4765,7 @@ int unit_kill_context(
         assert(c);
 
         /* Kill the processes belonging to this unit, in preparation for shutting the unit down.  Returns > 0
-         * if we killed something worth waiting for, 0 otherwise. Do not confuse with unit_kill_common()
-         * which is used for user-requested killing of unit processes. */
+         * if we killed something worth waiting for, 0 otherwise. */
 
         if (c->kill_mode == KILL_NONE)
                 return 0;

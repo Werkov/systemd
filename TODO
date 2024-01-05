@@ -1962,8 +1962,6 @@ Features:
 
 * shutdown logging: store to EFI var, and store to USB stick?
 
-* merge unit_kill_common() and unit_kill_context()
-
 * add a dependency on standard-conf.xml and other included files to man pages
 
 * MountFlags=shared acts as MountFlags=slave right now.
