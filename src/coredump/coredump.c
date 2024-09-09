@@ -1676,9 +1676,19 @@ static int gather_pid_mount_tree_fd(const Context *context) {
         if (r < 0)
                 return log_error_errno(r, "Failed to open mount namespace of crashing process: %m");
 
-        r = namespace_fork("(sd-mount-tree-ns)", "(sd-mount-tree)", NULL, 0, FORK_RESET_SIGNALS|FORK_DEATHSIG_SIGKILL, -1, mntns_fd, -1, -1, root_fd, &child);
+        r = namespace_fork("(sd-mount-tree-ns)",
+                           "(sd-mount-tree)",
+                           /* except_fds= */ NULL,
+                           /* n_except_fds= */ 0,
+                           FORK_RESET_SIGNALS|FORK_DEATHSIG_SIGKILL|FORK_LOG|FORK_WAIT,
+                           /* pidns_fd= */ -EBADF,
+                           mntns_fd,
+                           /* netns_fd= */ -EBADF,
+                           /* userns_fd= */ -EBADF,
+                           root_fd,
+                           &child);
         if (r < 0)
-                return log_error_errno(r, "Failed to fork(): %m");
+                return r;
         if (r == 0) {
                 pair[0] = safe_close(pair[0]);
 
@@ -1698,12 +1708,6 @@ static int gather_pid_mount_tree_fd(const Context *context) {
         }
 
         pair[1] = safe_close(pair[1]);
-
-        r = wait_for_terminate_and_check("(sd-mount-tree-ns)", child, 0);
-        if (r < 0)
-                return log_error_errno(r, "Failed to wait for child: %m");
-        if (r != EXIT_SUCCESS)
-                return log_error_errno(SYNTHETIC_ERRNO(ECHILD), "Child died abnormally.");
 
         fd = receive_one_fd(pair[0], MSG_DONTWAIT);
         if (fd < 0)
