@@ -17,6 +17,7 @@
 #include "serialize.h"
 #include "siphash24.h"
 #include "special.h"
+#include "stdio-util.h"
 #include "string-table.h"
 #include "string-util.h"
 #include "strv.h"
@@ -369,6 +370,53 @@ static void add_random_delay(Timer *t, usec_t *v) {
         log_unit_debug(UNIT(t), "Adding %s random time.", FORMAT_TIMESPAN(add, 0));
 }
 
+static int timer_update_source(
+                Timer *t, sd_event_source **source_ptr,
+                bool found,
+                clockid_t clock, uint64_t usec,
+                const char *name) {
+        sd_event_source *s = *ASSERT_PTR(source_ptr);
+        int r;
+
+        if (!found) {
+                r = sd_event_source_set_enabled(s, SD_EVENT_OFF);
+                if (r < 0)
+                        log_unit_warning_errno(UNIT(t), r, "Failed to disable %s event source: %m", name);
+                return r;
+        }
+
+        if (s) {
+                r = sd_event_source_set_time(s, usec);
+                if (r < 0) {
+                        log_unit_warning_errno(UNIT(t), r, "Failed to reschedule %s event source: %m", name);
+                        return r;
+                }
+
+                r = sd_event_source_set_enabled(s, SD_EVENT_ONESHOT);
+                if (r < 0) {
+                        log_unit_warning_errno(UNIT(t), r, "Failed to enable %s event source: %m", name);
+                        return r;
+                }
+        } else {
+                r = sd_event_add_time(
+                                UNIT(t)->manager->event,
+                                source_ptr,
+                                clock,
+                                usec, t->accuracy_usec,
+                                timer_dispatch, t);
+                if (r < 0) {
+                        log_unit_warning_errno(UNIT(t), r, "Failed to add %s event source: %m", name);
+                        return r;
+                }
+
+                char s_name[NAME_MAX];
+                xsprintf(s_name, "timer-%s", name);
+
+                (void) sd_event_source_set_description(t->monotonic_event_source, s_name);
+        }
+        return 0;
+}
+
 static void timer_enter_waiting(Timer *t, bool time_change) {
         bool found_monotonic = false, found_realtime = false;
         bool leave_around = false;
@@ -521,39 +569,11 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
                 left = usec_sub_unsigned(t->next_elapse_monotonic_or_boottime, triple_timestamp_by_clock(&ts, TIMER_MONOTONIC_CLOCK(t)));
                 log_unit_debug(UNIT(t), "Monotonic timer elapses in %s.", FORMAT_TIMESPAN(left, 0));
 
-                if (t->monotonic_event_source) {
-                        r = sd_event_source_set_time(t->monotonic_event_source, t->next_elapse_monotonic_or_boottime);
-                        if (r < 0) {
-                                log_unit_warning_errno(UNIT(t), r, "Failed to reschedule monotonic event source: %m");
-                                goto fail;
-                        }
-
-                        r = sd_event_source_set_enabled(t->monotonic_event_source, SD_EVENT_ONESHOT);
-                        if (r < 0) {
-                                log_unit_warning_errno(UNIT(t), r, "Failed to enable monotonic event source: %m");
-                                goto fail;
-                        }
-                } else {
-                        r = sd_event_add_time(
-                                        UNIT(t)->manager->event,
-                                        &t->monotonic_event_source,
-                                        TIMER_MONOTONIC_CLOCK(t),
-                                        t->next_elapse_monotonic_or_boottime, t->accuracy_usec,
-                                        timer_dispatch, t);
-                        if (r < 0) {
-                                log_unit_warning_errno(UNIT(t), r, "Failed to add monotonic event source: %m");
-                                goto fail;
-                        }
-
-                        (void) sd_event_source_set_description(t->monotonic_event_source, "timer-monotonic");
-                }
-
-        } else {
-                r = sd_event_source_set_enabled(t->monotonic_event_source, SD_EVENT_OFF);
-                if (r < 0) {
-                        log_unit_warning_errno(UNIT(t), r, "Failed to disable monotonic event source: %m");
+                if (timer_update_source(t, &t->monotonic_event_source,
+                                found_monotonic,
+                                TIMER_MONOTONIC_CLOCK(t), t->next_elapse_monotonic_or_boottime,
+                                "monotonic") < 0)
                         goto fail;
-                }
         }
 
         if (found_realtime) {
@@ -561,40 +581,11 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
 
                 log_unit_debug(UNIT(t), "Realtime timer elapses at %s.", FORMAT_TIMESTAMP(t->next_elapse_realtime));
 
-                if (t->realtime_event_source) {
-                        r = sd_event_source_set_time(t->realtime_event_source, t->next_elapse_realtime);
-                        if (r < 0) {
-                                log_unit_warning_errno(UNIT(t), r, "Failed to reschedule realtime event source: %m");
-                                goto fail;
-                        }
-
-                        r = sd_event_source_set_enabled(t->realtime_event_source, SD_EVENT_ONESHOT);
-                        if (r < 0) {
-                                log_unit_warning_errno(UNIT(t), r, "Failed to enable realtime event source: %m");
-                                goto fail;
-                        }
-                } else {
-                        r = sd_event_add_time(
-                                        UNIT(t)->manager->event,
-                                        &t->realtime_event_source,
-                                        TIMER_REALTIME_CLOCK(t),
-                                        t->next_elapse_realtime, t->accuracy_usec,
-                                        timer_dispatch, t);
-                        if (r < 0) {
-                                log_unit_warning_errno(UNIT(t), r, "Failed to add realtime event source: %m");
-                                goto fail;
-                        }
-
-                        (void) sd_event_source_set_description(t->realtime_event_source, "timer-realtime");
-                }
-
-        } else if (t->realtime_event_source) {
-
-                r = sd_event_source_set_enabled(t->realtime_event_source, SD_EVENT_OFF);
-                if (r < 0) {
-                        log_unit_warning_errno(UNIT(t), r, "Failed to disable realtime event source: %m");
+                if (timer_update_source(t, &t->realtime_event_source,
+                                found_realtime,
+                                TIMER_REALTIME_CLOCK(t), t->next_elapse_realtime,
+                                "realtime") < 0)
                         goto fail;
-                }
         }
 
         timer_set_state(t, TIMER_WAITING);
