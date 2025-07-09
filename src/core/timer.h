@@ -70,6 +70,7 @@ typedef struct ActivationDetailsTimer {
 } ActivationDetailsTimer;
 
 #define TIMER_MONOTONIC_CLOCK(t) ((t)->wake_system ? CLOCK_BOOTTIME_ALARM : CLOCK_MONOTONIC)
+#define TIMER_REALTIME_CLOCK(t)  ((t)->wake_system ? CLOCK_REALTIME_ALARM : CLOCK_REALTIME)
 
 uint64_t timer_next_elapse_monotonic(const Timer *t);
 

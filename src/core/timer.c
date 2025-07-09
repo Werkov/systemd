@@ -537,7 +537,7 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
                         r = sd_event_add_time(
                                         UNIT(t)->manager->event,
                                         &t->monotonic_event_source,
-                                        t->wake_system ? CLOCK_BOOTTIME_ALARM : CLOCK_MONOTONIC,
+                                        TIMER_MONOTONIC_CLOCK(t),
                                         t->next_elapse_monotonic_or_boottime, t->accuracy_usec,
                                         timer_dispatch, t);
                         if (r < 0) {
@@ -577,7 +577,7 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
                         r = sd_event_add_time(
                                         UNIT(t)->manager->event,
                                         &t->realtime_event_source,
-                                        t->wake_system ? CLOCK_REALTIME_ALARM : CLOCK_REALTIME,
+                                        TIMER_REALTIME_CLOCK(t),
                                         t->next_elapse_realtime, t->accuracy_usec,
                                         timer_dispatch, t);
                         if (r < 0) {
