@@ -73,6 +73,12 @@ typedef struct ActivationDetailsTimer {
 #define TIMER_REALTIME_CLOCK(t)  ((t)->wake_system ? CLOCK_REALTIME_ALARM : CLOCK_REALTIME)
 
 uint64_t timer_next_elapse_monotonic(const Timer *t);
+int timer_calculate_elapse(
+                Timer *t, triple_timestamp *ts, Unit *trigger,
+                dual_timestamp timestamps[], size_t n_timestamps,
+                bool time_change,
+                bool *r_found_monotonic, bool *r_found_realtime,
+                bool *r_leave_around);
 
 void timer_free_values(Timer *t);
 

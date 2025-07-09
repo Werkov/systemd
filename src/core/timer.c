@@ -417,22 +417,21 @@ static int timer_update_source(
         return 0;
 }
 
-static void timer_enter_waiting(Timer *t, bool time_change) {
+int timer_calculate_elapse(
+                Timer *t, triple_timestamp *ts, Unit *trigger,
+                dual_timestamp timestamps[], size_t n_timestamps,
+                bool time_change,
+                bool *r_found_monotonic, bool *r_found_realtime,
+                bool *r_leave_around) {
         bool found_monotonic = false, found_realtime = false;
-        bool leave_around = false;
-        triple_timestamp ts;
-        Unit *trigger;
         int r;
 
-        assert(t);
+        assert(trigger);
+        assert(MANAGER_TIMESTAMP_USERSPACE < n_timestamps);
+        assert(r_leave_around);
+        assert(r_found_monotonic);
+        assert(r_found_realtime);
 
-        trigger = UNIT_TRIGGER(UNIT(t));
-        if (!trigger) {
-                log_unit_error(UNIT(t), "Unit to trigger vanished.");
-                goto fail;
-        }
-
-        triple_timestamp_now(&ts);
         t->next_elapse_monotonic_or_boottime = t->next_elapse_realtime = 0;
 
         LIST_FOREACH(value, v, t->values) {
@@ -466,7 +465,7 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
                         else if (dual_timestamp_is_set(&UNIT(t)->inactive_exit_timestamp))
                                 b = UNIT(t)->inactive_exit_timestamp.realtime - random_offset;
                         else
-                                b = ts.realtime - random_offset;
+                                b = ts->realtime - random_offset;
 
                         r = calendar_spec_next_usec(v->calendar_spec, b, &v->next_elapse);
                         if (r < 0)
@@ -478,7 +477,7 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
                          * time has already passed, set the time when systemd first started as the scheduled
                          * time. Note that we base this on the monotonic timestamp of the boot, not the
                          * realtime one, since the wallclock might have been off during boot. */
-                        rebased = map_clock_usec(UNIT(t)->manager->timestamps[MANAGER_TIMESTAMP_USERSPACE].monotonic,
+                        rebased = map_clock_usec(timestamps[MANAGER_TIMESTAMP_USERSPACE].monotonic,
                                                  CLOCK_MONOTONIC, CLOCK_REALTIME);
                         if (v->next_elapse < rebased)
                                 v->next_elapse = rebased;
@@ -499,7 +498,7 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
                                 if (state_translation_table[t->state] == UNIT_ACTIVE)
                                         base = UNIT(t)->inactive_exit_timestamp.monotonic;
                                 else
-                                        base = ts.monotonic;
+                                        base = ts->monotonic;
                                 break;
 
                         case TIMER_BOOT:
@@ -513,18 +512,18 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
                                  * our own startup. */
                                 _fallthrough_;
                         case TIMER_STARTUP:
-                                base = UNIT(t)->manager->timestamps[MANAGER_TIMESTAMP_USERSPACE].monotonic;
+                                base = timestamps[MANAGER_TIMESTAMP_USERSPACE].monotonic;
                                 break;
 
                         case TIMER_UNIT_ACTIVE:
-                                leave_around = true;
+                                *r_leave_around = true;
                                 base = MAX(trigger->inactive_exit_timestamp.monotonic, t->last_trigger.monotonic);
                                 if (base <= 0)
                                         continue;
                                 break;
 
                         case TIMER_UNIT_INACTIVE:
-                                leave_around = true;
+                                *r_leave_around = true;
                                 base = MAX(trigger->inactive_enter_timestamp.monotonic, t->last_trigger.monotonic);
                                 if (base <= 0)
                                         continue;
@@ -539,10 +538,10 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
 
                         if (dual_timestamp_is_set(&t->last_trigger) &&
                             !time_change &&
-                            v->next_elapse < triple_timestamp_by_clock(&ts, TIMER_MONOTONIC_CLOCK(t)) &&
+                            v->next_elapse < triple_timestamp_by_clock(ts, TIMER_MONOTONIC_CLOCK(t)) &&
                             IN_SET(v->base, TIMER_ACTIVE, TIMER_BOOT, TIMER_STARTUP)) {
                                 /* This is a one time trigger, disable it now */
-                                v->disabled = true;
+                                v->disabled = true; /* XXX move mutation out of timer_calculate_elapse */
                                 continue;
                         }
 
@@ -557,8 +556,7 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
 
         if (!found_monotonic && !found_realtime && !t->on_timezone_change && !t->on_clock_change) {
                 log_unit_debug(UNIT(t), "Timer is elapsed.");
-                timer_enter_elapsed(t, leave_around);
-                return;
+                return 0;
         }
 
         if (found_monotonic) {
@@ -566,27 +564,61 @@ static void timer_enter_waiting(Timer *t, bool time_change) {
 
                 add_random_delay(t, &t->next_elapse_monotonic_or_boottime);
 
-                left = usec_sub_unsigned(t->next_elapse_monotonic_or_boottime, triple_timestamp_by_clock(&ts, TIMER_MONOTONIC_CLOCK(t)));
+                left = usec_sub_unsigned(t->next_elapse_monotonic_or_boottime, triple_timestamp_by_clock(ts, TIMER_MONOTONIC_CLOCK(t)));
                 log_unit_debug(UNIT(t), "Monotonic timer elapses in %s.", FORMAT_TIMESPAN(left, 0));
-
-                if (timer_update_source(t, &t->monotonic_event_source,
-                                found_monotonic,
-                                TIMER_MONOTONIC_CLOCK(t), t->next_elapse_monotonic_or_boottime,
-                                "monotonic") < 0)
-                        goto fail;
         }
 
         if (found_realtime) {
                 add_random_delay(t, &t->next_elapse_realtime);
 
                 log_unit_debug(UNIT(t), "Realtime timer elapses at %s.", FORMAT_TIMESTAMP(t->next_elapse_realtime));
-
-                if (timer_update_source(t, &t->realtime_event_source,
-                                found_realtime,
-                                TIMER_REALTIME_CLOCK(t), t->next_elapse_realtime,
-                                "realtime") < 0)
-                        goto fail;
         }
+
+        *r_found_monotonic = found_monotonic;
+        *r_found_realtime = found_realtime;
+        return 1;
+}
+
+static void timer_enter_waiting(Timer *t, bool time_change) {
+        bool found_monotonic = false, found_realtime = false;
+        bool leave_around = false;
+        triple_timestamp ts;
+        Unit *trigger;
+        int r;
+
+        assert(t);
+
+        trigger = UNIT_TRIGGER(UNIT(t));
+        if (!trigger) {
+                log_unit_error(UNIT(t), "Unit to trigger vanished.");
+                goto fail;
+        }
+
+        triple_timestamp_now(&ts);
+        r = timer_calculate_elapse(
+                        t, &ts, trigger,
+                        UNIT(t)->manager->timestamps, ELEMENTSOF(UNIT(t)->manager->timestamps),
+                        time_change,
+                        &found_monotonic, &found_realtime,
+                        &leave_around);
+        if (r < 0)
+                goto fail;
+        if (r == 0) {
+                timer_enter_elapsed(t, leave_around);
+                return;
+        }
+
+        if (timer_update_source(t, &t->monotonic_event_source,
+                        found_monotonic,
+                        TIMER_MONOTONIC_CLOCK(t), t->next_elapse_monotonic_or_boottime,
+                        "monotonic") < 0)
+                goto fail;
+
+        if (timer_update_source(t, &t->realtime_event_source,
+                        found_realtime,
+                        TIMER_REALTIME_CLOCK(t), t->next_elapse_realtime,
+                        "realtime") < 0)
+                goto fail;
 
         timer_set_state(t, TIMER_WAITING);
         return;
