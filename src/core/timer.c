@@ -477,8 +477,9 @@ int timer_calculate_elapse(
                          * time has already passed, set the time when systemd first started as the scheduled
                          * time. Note that we base this on the monotonic timestamp of the boot, not the
                          * realtime one, since the wallclock might have been off during boot. */
-                        rebased = map_clock_usec(timestamps[MANAGER_TIMESTAMP_USERSPACE].monotonic,
-                                                 CLOCK_MONOTONIC, CLOCK_REALTIME);
+                        rebased = map_clock_usec_raw(timestamps[MANAGER_TIMESTAMP_USERSPACE].monotonic,
+                                                     triple_timestamp_by_clock(ts, CLOCK_MONOTONIC),
+                                                     triple_timestamp_by_clock(ts, CLOCK_REALTIME));
                         if (v->next_elapse < rebased)
                                 v->next_elapse = rebased;
 
