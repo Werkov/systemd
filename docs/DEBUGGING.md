@@ -176,7 +176,7 @@ If normal reboot or poweroff work, but take a suspiciously long time, then
 * boot with the debug options:
 
 ```sh
-systemd.log_level=debug systemd.log_target=kmsg log_buf_len=1M printk.devkmsg=on enforcing=0
+systemd.log_level=debug systemd.log_target=kmsg system.log_ratelimit_kmsg=0 log_buf_len=1M printk.devkmsg=on enforcing=0
 ```
 
 * save the following script as `/usr/lib/systemd/system-shutdown/debug.sh` and make it executable:
