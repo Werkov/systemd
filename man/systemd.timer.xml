@@ -441,6 +441,24 @@
       </varlistentry>
     </variablelist>
 
+    <refsect2>
+      <title>Uptime and randomization</title>
+      <para>
+        The system wake up may constitute a barrier that poses a thundering herd problem with all realtime
+        timers catching up after the downtime. <varname>RandomizedDelaySec=</varname> could spread out these
+        missed events. But when this randomization interval gets too long (think of the average delay greater
+        than the average uptime), the intended rate of realtime timers would be compromised.
+        <varname>RandomizedOffsetSec=</varname>
+        is applied only once and not on each reboot, hence it does not reduce the rate disproportionately.
+        Rule of thumb for configuration? Decide which thundering herd you want to avoid (post-startup or
+        point-in-calendar) and what spread interval sufficiently dilutes the load from timer invocations. If
+        the expected uptime is shorter than this interval, you'd better configure
+        <varname>RandomizedOffsetSec=</varname>, if reboots are rare
+        <varname>RandomizedDelaySec=</varname> will do. You can even configure both but remember that
+        <varname>RandomizedDelaySec=</varname> should always fit under your expected uptime.
+      </para>
+    </refsect2>
+
     <xi:include href="systemd.service.xml" xpointer="shared-unit-options" />
   </refsect1>
 
