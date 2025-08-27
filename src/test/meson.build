@@ -587,6 +587,10 @@ executables += [
                 'sources' : files('test-tables.c'),
         },
         core_test_template + {
+                'sources' : files('test-timer-reboot.c'),
+                'dependencies' : common_test_dependencies,
+        },
+        core_test_template + {
                 'sources' : files('test-unit-name.c'),
                 'dependencies' : common_test_dependencies,
         },

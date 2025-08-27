@@ -512,6 +512,27 @@ _noreturn_ void log_test_failed_internal(const char *file, int line, const char 
         })
 #endif
 
+#ifdef __COVERITY__
+#  define ASSERT_BETWEEN(expr, lower, upper) __coverity_check__((expr) >= (_lower) && (expr) < (_upper))
+#else
+#  define ASSERT_BETWEEN(expr, lower, upper)                                                                    \
+        ({                                                                                                      \
+                typeof(expr) _expr   = (expr);                                                                  \
+                typeof(lower) _lower = (lower);                                                                 \
+                typeof(upper) _upper = (upper);                                                                 \
+                if (!(_expr < _lower || _expr >= _upper)) {                                                     \
+                        char _sexpr[DECIMAL_STR_MAX(typeof(expr))];                                             \
+                        char _slower[DECIMAL_STR_MAX(typeof(lower))];                                           \
+                        char _supper[DECIMAL_STR_MAX(typeof(upper))];                                           \
+                        xsprintf(_sexpr,  DECIMAL_STR_FMT(_expr),  _expr);                                      \
+                        xsprintf(_slower, DECIMAL_STR_FMT(_lower), _lower);                                     \
+                        xsprintf(_supper, DECIMAL_STR_FMT(_upper), _upper);                                     \
+                        log_test_failed("Expected \"%s in [%s, %s), but %s = %s",                               \
+                                        #expr, _slower, _supper, #expr, _sexpr);                                \
+                }                                                                                               \
+        })
+#endif
+
 int assert_signal_internal(void);
 
 #ifdef __COVERITY__
