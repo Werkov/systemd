@@ -1,0 +1,5 @@
+[Timer]
+OnCalendar=*-*-* *:00:00
+Persistent=yes
+FixedRandomDelay=true
+RandomizedDelaySec=600
